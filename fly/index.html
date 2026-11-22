@@ -94,16 +94,16 @@ header p { margin: 4px 0 0; color: var(--muted); font-size: 0.9rem; line-height:
 }
 .btns {
   position: absolute;
-  right: 3%;
-  bottom: 6%;
+  right: 2%;
+  bottom: 5%;
   display: grid;
-  grid-template-columns: repeat(2, 64px);
-  gap: 10px;
+  grid-template-columns: repeat(3, 56px);
+  gap: 8px;
   pointer-events: auto;
 }
 .btns button {
-  width: 64px;
-  height: 64px;
+  width: 56px;
+  height: 56px;
   border-radius: 50%;
   border: 2px solid rgba(255, 255, 255, 0.4);
   background: rgba(20, 32, 52, 0.55);
@@ -122,6 +122,7 @@ header p { margin: 4px 0 0; color: var(--muted); font-size: 0.9rem; line-height:
 #btn-mis { border-color: rgba(240, 160, 40, 0.7); }
 #btn-rev { border-color: rgba(80, 200, 255, 0.7); }
 #btn-boost { border-color: rgba(255, 220, 80, 0.7); }
+#btn-brake { border-color: rgba(140, 180, 220, 0.7); }
 
 @media (max-width: 720px) {
   body { padding: 6px; align-content: start; }
@@ -129,8 +130,8 @@ header p { margin: 4px 0 0; color: var(--muted); font-size: 0.9rem; line-height:
   .help { font-size: 0.75rem; }
   .stage { aspect-ratio: 16 / 11; width: 100%; }
   .stick { width: 96px; height: 96px; }
-  .btns { grid-template-columns: repeat(2, 56px); gap: 8px; }
-  .btns button { width: 56px; height: 56px; font-size: 11px; }
+  .btns { grid-template-columns: repeat(3, 48px); gap: 6px; }
+  .btns button { width: 48px; height: 48px; font-size: 10px; }
 }
 @media (orientation: landscape) and (max-height: 500px) {
   header { display: none; }
@@ -149,8 +150,8 @@ header p { margin: 4px 0 0; color: var(--muted); font-size: 0.9rem; line-height:
 <body>
   <div class="wrap">
     <header>
-      <h1>FLY 3D · v6</h1>
-      <p>F-22 · BOSS 關卡循環（難度每 LOOP 上升）· 導彈 10 發後裝填 · 散彈可打落導彈 · 手機觸控／鍵盤／滑鼠都得</p>
+      <h1>FLY 3D · v7</h1>
+      <p>F-22 · BOSS 關卡循環 · 導彈彈匣 · W 加速／X 減速 · 手機觸控／鍵盤／滑鼠都得</p>
     </header>
     <div class="stage">
       <canvas id="view"></canvas>
@@ -162,14 +163,16 @@ header p { margin: 4px 0 0; color: var(--muted); font-size: 0.9rem; line-height:
           <button type="button" id="btn-mis">導彈</button>
           <button type="button" id="btn-rev">反轉</button>
           <button type="button" id="btn-boost">加速</button>
+          <button type="button" id="btn-brake">減速</button>
         </div>
       </div>
     </div>
     <div class="help">
       <span><kbd>E</kbd> 攀升 · <kbd>D</kbd> 下降 · <kbd>S</kbd>/<kbd>F</kbd> 轉彎</span>
+      <span><kbd>W</kbd>／<kbd>Shift</kbd> 加速 · <kbd>X</kbd>／<kbd>Ctrl</kbd> 減速</span>
       <span><kbd>Space</kbd> 危急反轉 · <kbd>J</kbd> 機槍 · <kbd>K</kbd> 導彈（10 發後冷卻裝填）</span>
-      <span><kbd>Shift</kbd> 加速 · <kbd>M</kbd> 靜音 · <kbd>R</kbd> 重開</span>
-      <span>手機：左半虛擬搖桿，右下按鈕（機槍／導彈／反轉／加速）</span>
+      <span><kbd>M</kbd> 靜音 · <kbd>R</kbd> 重開</span>
+      <span>手機：左半虛擬搖桿，右下機槍／導彈／反轉／加速／減速</span>
       <span>BOSS 散彈可打落你嘅導彈 · 每過一循環（LOOP）難度上升</span>
       <span>撳一下畫面或任何鍵開聲</span>
     </div>
@@ -945,7 +948,7 @@ header p { margin: 4px 0 0; color: var(--muted); font-size: 0.9rem; line-height:
   const mouse = { inside: false, x: 0, y: 0, l: false, r: false, rEdge: false };
   const touchCtl = {
     stickId: null, stickX: 0, stickY: 0, active: false,
-    gun: false, boost: false,
+    gun: false, boost: false, brake: false,
   };
   addEventListener("keydown", (e) => {
     sfx.init();
@@ -1000,6 +1003,7 @@ header p { margin: 4px 0 0; color: var(--muted); font-size: 0.9rem; line-height:
   bindPad("btn-mis", () => { mouse.rEdge = true; }, () => {});
   bindPad("btn-rev", () => { player.revReq = true; }, () => {});
   bindPad("btn-boost", () => { touchCtl.boost = true; }, () => { touchCtl.boost = false; });
+  bindPad("btn-brake", () => { touchCtl.brake = true; }, () => { touchCtl.brake = false; });
   bindPad("btn-mute", () => { sfx.toggleMute(); }, () => {});
 
   function setStickFromEvent(e, rect) {
@@ -1696,8 +1700,13 @@ header p { margin: 4px 0 0; color: var(--muted); font-size: 0.9rem; line-height:
     deroll(player.q);
     player.q.normalize();
 
-    const boost = !!(keys.shift || touchCtl.boost);
-    player.speed = lerp(player.speed, boost ? 105 : 60, damp(1.4, dt));
+    // W/Shift = accel, X/Ctrl = brake; neither returns to cruise
+    const accel = !!(keys.w || keys.shift || touchCtl.boost);
+    const brake = !!(keys.x || keys.control || touchCtl.brake);
+    let speedTarget = 60;
+    if (accel && !brake) speedTarget = 110;
+    else if (brake && !accel) speedTarget = 32;
+    player.speed = lerp(player.speed, speedTarget, damp(accel || brake ? 1.8 : 1.2, dt));
     const f = fwdOf(player.q);
     player.pos.addScaledVector(f, player.speed * dt);
 
@@ -2010,7 +2019,7 @@ header p { margin: 4px 0 0; color: var(--muted); font-size: 0.9rem; line-height:
     playerJet.quaternion.copy(player.q)
       .multiply(tmpQ.setFromAxisAngle(AX, -player.sy * 0.38))
       .multiply(new T3.Quaternion().setFromAxisAngle(AZ, player.bank));
-    flickerFlames(playerJet, !!(keys.shift || touchCtl.boost), time);
+    flickerFlames(playerJet, !!(keys.w || keys.shift || touchCtl.boost) && !(keys.x || keys.control || touchCtl.brake), time);
     playerJet.updateMatrixWorld();
     pushTrail(trailL, playerJet.localToWorld(new T3.Vector3(-2.6 * S, 0, -1.2 * S)));
     pushTrail(trailR, playerJet.localToWorld(new T3.Vector3(2.6 * S, 0, -1.2 * S)));
