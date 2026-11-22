@@ -150,7 +150,7 @@ header p { margin: 4px 0 0; color: var(--muted); font-size: 0.9rem; line-height:
 <body>
   <div class="wrap">
     <header>
-      <h1>FLY 3D · v7</h1>
+      <h1>FLY 3D · v7.1</h1>
       <p>F-22 · BOSS 關卡循環 · 導彈彈匣 · W 加速／X 減速 · 手機觸控／鍵盤／滑鼠都得</p>
     </header>
     <div class="stage">
@@ -172,6 +172,7 @@ header p { margin: 4px 0 0; color: var(--muted); font-size: 0.9rem; line-height:
       <span><kbd>W</kbd>／<kbd>Shift</kbd> 加速 · <kbd>X</kbd>／<kbd>Ctrl</kbd> 減速</span>
       <span><kbd>Space</kbd> 危急反轉 · <kbd>J</kbd> 機槍 · <kbd>K</kbd> 導彈（10 發後冷卻裝填）</span>
       <span><kbd>M</kbd> 靜音 · <kbd>R</kbd> 重開</span>
+      <span>方向捍／滑鼠：向上＝機頭向下，向下＝機頭向上（E 仍係攀升）</span>
       <span>手機：左半虛擬搖桿，右下機槍／導彈／反轉／加速／減速</span>
       <span>BOSS 散彈可打落你嘅導彈 · 每過一循環（LOOP）難度上升</span>
       <span>撳一下畫面或任何鍵開聲</span>
@@ -1015,11 +1016,12 @@ header p { margin: 4px 0 0; color: var(--muted); font-size: 0.9rem; line-height:
     const len = Math.hypot(dx, dy) || 1;
     if (len > 1) { dx /= len; dy /= len; }
     touchCtl.stickX = clamp(dx, -1, 1);
-    touchCtl.stickY = clamp(-dy, -1, 1);
+    // Aircraft stick: push forward (finger up) = nose down
+    touchCtl.stickY = clamp(dy, -1, 1);
     touchCtl.active = true;
     const knob = document.getElementById("stick-knob");
     if (knob) {
-      knob.style.transform = `translate(${dx * 28}px, ${-touchCtl.stickY * 28}px)`;
+      knob.style.transform = `translate(${dx * 28}px, ${touchCtl.stickY * 28}px)`;
     }
   }
   function onStickDown(e) {
@@ -1063,7 +1065,8 @@ header p { margin: 4px 0 0; color: var(--muted); font-size: 0.9rem; line-height:
     } else if (mouse.inside) {
       const dz = (v) => (Math.abs(v) < 0.12 ? 0 : (v - Math.sign(v) * 0.12) / 0.88);
       x = dz(mouse.x) * 1.3;
-      y = -dz(mouse.y) * 1.3;
+      // Aircraft stick: mouse up = nose down
+      y = dz(mouse.y) * 1.3;
     }
     if (keys.s || keys.a || keys.arrowleft) x = -1;
     if (keys.f || keys.arrowright) x = 1;
