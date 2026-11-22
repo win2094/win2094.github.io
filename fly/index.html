@@ -60,8 +60,8 @@ header p { margin: 4px 0 0; color: var(--muted); font-size: 0.9rem; line-height:
 <body>
   <div class="wrap">
     <header>
-      <h1>FLY 3D · v4 ACE</h1>
-      <p>真 3D（three.js）· F-22 真 3D · 打沉 BOSS 先過關：戰艦 → 大戰車 → 空中要塞 → 航空母艦 → 皇牌機師（黑色 F-18）→ 再循環 · 雷達紫色方格＝BOSS · 沖出火網機尾視角 · 地平線唔跟 bank 轉 · 360° 自由飛 · 導彈 LOCK · 機槍</p>
+      <h1>FLY 3D · v5</h1>
+      <p>真 3D（three.js）· F-22 真 3D · 打沉 BOSS 先過關：戰艦 → 大戰車 → 空中要塞 → 航空母艦 → 皇牌機師 → 再循環 · 第 10 關起有黑色 F-18 亂入（唔使打） · 雷達紫色方格＝BOSS · 沖出火網機尾視角 · 地平線唔跟 bank 轉 · 360° 自由飛 · 導彈 LOCK · 機槍</p>
     </header>
     <div class="stage">
       <canvas id="view"></canvas>
@@ -569,8 +569,13 @@ header p { margin: 4px 0 0; color: var(--muted); font-size: 0.9rem; line-height:
 
   const SHELL_GEO = new T3.SphereGeometry(1.5, 6, 4);
   const SHELL_MAT = new T3.MeshBasicMaterial({ color: 0xff9020 });
+  const PELLET_GEO = new T3.SphereGeometry(2.4, 8, 6);
+  const PELLET_MAT = new T3.MeshBasicMaterial({ color: 0xffe060 });
+  const PELLET_OUT = new T3.MeshBasicMaterial({ color: 0xff7020 });
   function shoot(pos, dir, speed, friendly, o = {}) {
-    const m = new T3.Mesh(o.shell ? SHELL_GEO : BULLET_GEO, o.shell ? SHELL_MAT : friendly ? BULLET_P : BULLET_E);
+    const geo = o.pellet ? PELLET_GEO : o.shell ? SHELL_GEO : BULLET_GEO;
+    const mat = o.pellet ? (o.pelletOut ? PELLET_OUT : PELLET_MAT) : o.shell ? SHELL_MAT : friendly ? BULLET_P : BULLET_E;
+    const m = new T3.Mesh(geo, mat);
     m.position.copy(pos);
     m.lookAt(pos.clone().add(dir));
     scene.add(m);
@@ -578,6 +583,29 @@ header p { margin: 4px 0 0; color: var(--muted); font-size: 0.9rem; line-height:
       m, vel: dir.clone().multiplyScalar(speed), friendly,
       life: o.life || 1.2, dmg: o.dmg || 5, r: o.r || 3.8,
     });
+  }
+  // Slow, wide, easy-to-see scatter burst (boss flak / 散彈)
+  function fireScatter(from, toward, count, speed, spread, o = {}) {
+    const base = toward.clone().sub(from).normalize();
+    if (base.lengthSq() < 1e-6) base.set(0, 1, 0);
+    const right = new T3.Vector3().crossVectors(base, WUP);
+    if (right.lengthSq() < 1e-6) right.set(1, 0, 0);
+    right.normalize();
+    const up = new T3.Vector3().crossVectors(right, base).normalize();
+    for (let i = 0; i < count; i++) {
+      const t = count === 1 ? 0 : (i / (count - 1) - 0.5) * 2;
+      const yaw = t * spread;
+      const pitch = (Math.abs(t) - 0.5) * spread * 0.35 + rnd(-spread * 0.08, spread * 0.08);
+      const dir = base.clone()
+        .addScaledVector(right, Math.sin(yaw))
+        .addScaledVector(up, Math.sin(pitch))
+        .normalize();
+      shoot(from, dir, speed, false, {
+        pellet: true, pelletOut: i % 2 === 0, dmg: o.dmg || 6, r: o.r || 5.5, life: o.life || 4.5,
+      });
+    }
+    addSprite(TEX_FLASH, from.clone(), 5, 3, 0.12, 0xffe080);
+    sfx.boom(false, o.vol || 0.35);
   }
   function launchEnemyMissile(pos, dir, speed) {
     eLaunchCd = LAUNCH_GAP;
@@ -600,29 +628,52 @@ header p { margin: 4px 0 0; color: var(--muted); font-size: 0.9rem; line-height:
   const playerJet = makeJet(GEO_PLAYER);
   scene.add(playerJet);
 
-  // Pilot + parachute + rescue jet
+  // Pilot + parachute + rescue jet (humanoid pilot, not a box)
   const pilot = new T3.Group();
   {
-    const body = new T3.Mesh(new T3.BoxGeometry(0.9, 1.4, 0.9), new T3.MeshLambertMaterial({ color: 0x9aa2aa }));
-    pilot.add(body);
-    const cg = new T3.SphereGeometry(4.2, 10, 4, 0, Math.PI * 2, 0, Math.PI / 2);
+    const suit = new T3.MeshLambertMaterial({ color: 0x4a5a48 });
+    const skin = new T3.MeshLambertMaterial({ color: 0xc9a07a });
+    const harness = new T3.MeshLambertMaterial({ color: 0xd8c060 });
+    const head = new T3.Mesh(new T3.SphereGeometry(0.32, 10, 8), skin);
+    head.position.y = 1.55;
+    pilot.add(head);
+    const helm = new T3.Mesh(new T3.SphereGeometry(0.34, 10, 8, 0, Math.PI * 2, 0, Math.PI * 0.55), new T3.MeshLambertMaterial({ color: 0x1a2228 }));
+    helm.position.y = 1.62;
+    pilot.add(helm);
+    const torso = new T3.Mesh(new T3.CylinderGeometry(0.38, 0.42, 0.95, 10), suit);
+    torso.position.y = 0.95;
+    pilot.add(torso);
+    const belt = new T3.Mesh(new T3.TorusGeometry(0.4, 0.07, 6, 12), harness);
+    belt.rotation.x = Math.PI / 2;
+    belt.position.y = 0.55;
+    pilot.add(belt);
+    for (const sx of [-1, 1]) {
+      const arm = new T3.Mesh(new T3.CylinderGeometry(0.1, 0.1, 0.7, 6), suit);
+      arm.position.set(sx * 0.52, 1.05, 0);
+      arm.rotation.z = sx * 0.35;
+      pilot.add(arm);
+      const leg = new T3.Mesh(new T3.CylinderGeometry(0.12, 0.14, 0.75, 6), suit);
+      leg.position.set(sx * 0.18, 0.15, 0);
+      pilot.add(leg);
+    }
+    const cg = new T3.SphereGeometry(4.6, 12, 5, 0, Math.PI * 2, 0, Math.PI / 2);
     const cols = [];
     const p = cg.attributes.position;
     for (let i = 0; i < p.count; i++) {
-      const sector = Math.floor(((Math.atan2(p.getZ(i), p.getX(i)) + Math.PI) / (Math.PI * 2)) * 10);
+      const sector = Math.floor(((Math.atan2(p.getZ(i), p.getX(i)) + Math.PI) / (Math.PI * 2)) * 12);
       const c = new T3.Color(sector % 2 ? 0xd82020 : 0xf4f4f4);
       cols.push(c.r, c.g, c.b);
     }
     cg.setAttribute("color", new T3.Float32BufferAttribute(cols, 3));
     const chute = new T3.Mesh(cg, new T3.MeshLambertMaterial({ vertexColors: true, side: T3.DoubleSide }));
-    chute.position.y = 5;
+    chute.position.y = 5.4;
     chute.name = "chute";
     pilot.add(chute);
     const lineGeo = new T3.BufferGeometry().setFromPoints([
-      new T3.Vector3(-4, 5, 0), new T3.Vector3(0, 0.6, 0), new T3.Vector3(4, 5, 0),
-      new T3.Vector3(0, 0.6, 0), new T3.Vector3(0, 5, 4), new T3.Vector3(0, 0.6, 0), new T3.Vector3(0, 5, -4),
+      new T3.Vector3(-3.8, 5.2, 0), new T3.Vector3(0, 1.4, 0), new T3.Vector3(3.8, 5.2, 0),
+      new T3.Vector3(0, 1.4, 0), new T3.Vector3(0, 5.2, 3.8), new T3.Vector3(0, 1.4, 0), new T3.Vector3(0, 5.2, -3.8),
     ]);
-    pilot.add(new T3.Line(lineGeo, new T3.LineBasicMaterial({ color: 0x666666 })));
+    pilot.add(new T3.Line(lineGeo, new T3.LineBasicMaterial({ color: 0x888888 })));
   }
   pilot.visible = false;
   scene.add(pilot);
@@ -645,15 +696,19 @@ header p { margin: 4px 0 0; color: var(--muted); font-size: 0.9rem; line-height:
     pos.y = Math.max(45, player.pos.y + rnd(-40, 70));
     addEnemy(pos, player.pos);
   }
-  function addEnemy(pos, lookAt) {
-    const jet = makeJet(GEO_ENEMY, 0.8);
+  function addEnemy(pos, lookAt, opts = {}) {
+    const isAce = !!opts.ace;
+    const jet = makeJet(isAce ? GEO_ACE : GEO_ENEMY, isAce ? 1 : 0.8);
+    if (isAce) jet.scale.setScalar(1.05);
     jet.position.copy(pos);
     jet.lookAt(lookAt);
     scene.add(jet);
     enemies.push({
-      jet, pos: pos.clone(), q: jet.quaternion.clone(), bank: 0, hp: 30,
+      jet, pos: pos.clone(), q: jet.quaternion.clone(), bank: 0,
+      hp: isAce ? 55 : 30, isAce,
       cd: rnd(2, 3.5), lockT: 0, lockP: 0, mcd: rnd(10, 16),
-      attack: Math.random() < 0.4, modeT: rnd(3, 9), roamTo: new T3.Vector3(rnd(-500, 500), 40, rnd(-500, 500)), speed: rnd(48, 62),
+      attack: Math.random() < 0.4, modeT: rnd(3, 9), roamTo: new T3.Vector3(rnd(-500, 500), 40, rnd(-500, 500)),
+      speed: isAce ? rnd(68, 80) : rnd(48, 62),
       aim: new T3.Vector3(rnd(-40, 40), rnd(-15, 25), rnd(-30, 30)),
     });
   }
@@ -973,7 +1028,7 @@ header p { margin: 4px 0 0; color: var(--muted); font-size: 0.9rem; line-height:
       box(pivot, 0.5, 0.5, 5, 0.7, 0.2, 3.6, 0x202226);
       muzzle = new T3.Vector3(0, 0.2, 6.4);
       r = 6;
-      hp = 40;
+      hp = 95;
     } else if (kind === "main") {
       box(base, 10, 2, 10, 0, 1, 0, color);
       pivot.position.y = 4;
@@ -981,7 +1036,7 @@ header p { margin: 4px 0 0; color: var(--muted); font-size: 0.9rem; line-height:
       box(pivot, 1.5, 1.5, 16, 0, 0.3, 12, 0x1c1e22);
       muzzle = new T3.Vector3(0, 0.3, 20.5);
       r = 10;
-      hp = 90;
+      hp = 200;
     } else {
       box(base, 5, 1.6, 5, 0, 0.8, 0, color);
       pivot.position.y = 3;
@@ -989,7 +1044,7 @@ header p { margin: 4px 0 0; color: var(--muted); font-size: 0.9rem; line-height:
       for (const [sx, sy] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) box(pivot, 1.1, 1.1, 0.6, sx * 1.15, sy * 0.65, 2.6, 0xf0f0f0);
       muzzle = new T3.Vector3(0, 0, 3.2);
       r = 6;
-      hp = 50;
+      hp = 110;
     }
     base.add(pivot);
     hp *= boss.hpMul;
@@ -1045,13 +1100,13 @@ header p { margin: 4px 0 0; color: var(--muted); font-size: 0.9rem; line-height:
   function makeBoss(kind, loop) {
     const group = new T3.Group();
     const boss = {
-      kind, group, loop, parts: [], flames: [], hpMul: 1 + loop * 0.25,
-      heading: new T3.Vector3(0, 0, 1), t: 0, dying: 0, boomT: 0, launchCd: 5,
+      kind, group, loop, parts: [], flames: [], hpMul: 1 + loop * 0.4,
+      heading: new T3.Vector3(0, 0, 1), t: 0, dying: 0, boomT: 0, launchCd: 5, flakCd: rnd(2, 4),
       speed: 0, anchor: null, ang: 0, hull: null, core: null, hitT: 0,
     };
     const fwd = flatForward();
     const side = fwd.clone().applyAxisAngle(WUP, Math.random() < 0.5 ? Math.PI / 2 : -Math.PI / 2);
-    let coreHp = 300;
+    let coreHp = 500;
     if (kind === "battleship") {
       box(group, 18, 7, 96, 0, 2, 0, 0x66707c);
       box(group, 18.4, 1, 96.4, 0, -1.2, 0, 0x7a2a22);
@@ -1065,7 +1120,7 @@ header p { margin: 4px 0 0; color: var(--muted); font-size: 0.9rem; line-height:
       for (const z of [36, 22, -24, -38]) addPart(boss, "turret", 0, 6, z, 0x58606a);
       addPart(boss, "sam", 6, 6, -12, 0x58606a);
       boss.hull = { c: new T3.Vector3(0, 6, 6), h: new T3.Vector3(9.5, 10, 62) };
-      coreHp = 200;
+      coreHp = 520;
       boss.speed = 5;
       group.position.copy(seaSpot(fwd, 950));
       boss.heading.copy(side);
@@ -1082,7 +1137,7 @@ header p { margin: 4px 0 0; color: var(--muted); font-size: 0.9rem; line-height:
       addPart(boss, "turret", 8, 11.5, -16, 0x4e5c32);
       addPart(boss, "sam", -8, 11.5, -16, 0x4e5c32);
       boss.hull = { c: new T3.Vector3(0, 8, 0), h: new T3.Vector3(17, 8, 27) };
-      coreHp = 210;
+      coreHp = 560;
       group.scale.setScalar(1.3);
       group.position.copy(islandSpot(fwd));
       boss.heading.copy(fwd).multiplyScalar(-1);
@@ -1109,7 +1164,7 @@ header p { margin: 4px 0 0; color: var(--muted); font-size: 0.9rem; line-height:
       addPart(boss, "main", 0, -4, 28, 0x5a6272, true);
       addPart(boss, "sam", 0, 4.5, -14, 0x5a6272);
       boss.hull = { c: new T3.Vector3(0, 0, 2), h: new T3.Vector3(57, 6, 36) };
-      coreHp = 240;
+      coreHp = 620;
       boss.speed = 14;
       boss.anchor = player.pos.clone().addScaledVector(fwd, 950);
       boss.anchor.y = 165;
@@ -1145,7 +1200,7 @@ header p { margin: 4px 0 0; color: var(--muted); font-size: 0.9rem; line-height:
       addPart(boss, "sam", 12, 23, -8, 0x58606a);
       addPart(boss, "sam", -13, 9, -50, 0x58606a);
       boss.hull = { c: new T3.Vector3(0, 6, 2), h: new T3.Vector3(16, 8, 64) };
-      coreHp = 260;
+      coreHp = 680;
       boss.speed = 4;
       group.position.copy(seaSpot(fwd, 950));
       boss.heading.copy(side);
@@ -1371,17 +1426,17 @@ header p { margin: 4px 0 0; color: var(--muted); font-size: 0.9rem; line-height:
       const mz = p.pivot.localToWorld(p.muzzle.clone());
       const near = clamp(1 - d / 900, 0.15, 1);
       if (p.kind === "turret") {
-        if (d < 460 && p.cd <= 0) {
-          p.cd = rnd(2.5, 4.0);
-          for (let k = 0; k < 2; k++) shoot(mz, aimDir(mz, 230, 0.05), 230, false, { dmg: 3, life: 2.2 });
-          sfx.gun(0.4 * near);
+        // Slow, obvious scatter (散彈) — easy to see and dodge
+        if (d < 520 && p.cd <= 0) {
+          p.cd = rnd(3.8, 5.5);
+          fireScatter(mz, player.pos, 5, 70, 0.55, { dmg: 7, r: 5.5, life: 5, vol: 0.3 * near });
         }
       } else if (p.kind === "main") {
-        if (d < 750 && p.cd <= 0) {
-          p.cd = rnd(4.5, 6.0);
-          shoot(mz, aimDir(mz, 160, 0.02), 160, false, { shell: true, dmg: 12, r: 6, life: 5 });
-          addSprite(TEX_BOOM, mz, 4, 9, 0.25, 0xffffff);
-          sfx.boom(false, 0.5 * near);
+        if (d < 780 && p.cd <= 0) {
+          p.cd = rnd(5.5, 7.5);
+          shoot(mz, aimDir(mz, 95, 0.015), 95, false, { shell: true, dmg: 16, r: 7, life: 6 });
+          // Extra wide slow scatter after the main shell
+          fireScatter(mz, player.pos, 7, 55, 0.7, { dmg: 8, r: 6, life: 5.5, vol: 0.45 * near });
         }
       } else if (p.kind === "sam") {
         if (d < 800 && p.cd <= 0 && player.invuln <= 0 && player.rev <= 0) p.lockP += dt;
@@ -1405,6 +1460,16 @@ header p { margin: 4px 0 0; color: var(--muted); font-size: 0.9rem; line-height:
         const bow = b.group.localToWorld(new T3.Vector3(0, 12, 64));
         addEnemy(bow, bow.clone().addScaledVector(b.heading, 100).add(new T3.Vector3(0, 25, 0)));
         sfx.missile(0.3);
+      }
+    }
+    // Hull flak: slow obvious scatter from the boss body (not ace)
+    if (flying && b.kind !== "ace") {
+      b.flakCd -= dt;
+      const dist = b.core.pos.distanceTo(player.pos);
+      if (b.flakCd <= 0 && dist < 650) {
+        b.flakCd = rnd(4.2, 6.5);
+        const from = b.core.pos.clone().add(new T3.Vector3(0, b.kind === "fortress" ? -8 : 12, 0));
+        fireScatter(from, player.pos, 7, 60, 0.85, { dmg: 8, r: 6, life: 5.5, vol: 0.4 });
       }
     }
     if (flying && insideHull(b, player.pos, 1)) playerDown(true);
@@ -1590,7 +1655,17 @@ header p { margin: 4px 0 0; color: var(--muted); font-size: 0.9rem; line-height:
         enemies.splice(i, 1);
       }
     }
-    if (enemies.length < 3) spawnEnemy();
+    // After stage 9 (display STAGE 10+), occasional black F-18 guests appear — optional kills, not required
+    const want = stage.n >= 9 ? 4 : 3;
+    if (enemies.length < want) {
+      const aceGuest = stage.n >= 9 && Math.random() < 0.35 && !enemies.some((e) => e.isAce);
+      if (aceGuest) {
+        const f = fwdOf(player.q); f.y = 0; if (f.lengthSq() < 0.01) f.set(0, 0, 1); f.normalize();
+        const pos = player.pos.clone().addScaledVector(f, rnd(480, 700)).add(new T3.Vector3(rnd(-180, 180), rnd(10, 60), 0));
+        pos.y = Math.max(60, pos.y);
+        addEnemy(pos, player.pos, { ace: true });
+      } else spawnEnemy();
+    }
   }
 
   function updateProjectiles(dt) {
@@ -1952,8 +2027,15 @@ header p { margin: 4px 0 0; color: var(--muted); font-size: 0.9rem; line-height:
     const blink = Math.floor(time * 6) % 2 === 0;
     for (const e of enemies) {
       const p = toRadar(e.pos);
-      hx.fillStyle = e.lockP > LOCK_WARN && blink ? "#ffd020" : "#ff3a2a";
-      hx.fillRect(p.x - 1, p.y - 1, p.edge ? 2 : 3, p.edge ? 2 : 3);
+      if (e.isAce) {
+        hx.fillStyle = blink ? "#c080ff" : "#8040c0";
+        hx.beginPath();
+        hx.moveTo(p.x, p.y - 3); hx.lineTo(p.x + 3, p.y); hx.lineTo(p.x, p.y + 3); hx.lineTo(p.x - 3, p.y);
+        hx.closePath(); hx.fill();
+      } else {
+        hx.fillStyle = e.lockP > LOCK_WARN && blink ? "#ffd020" : "#ff3a2a";
+        hx.fillRect(p.x - 1, p.y - 1, p.edge ? 2 : 3, p.edge ? 2 : 3);
+      }
       hx.fillStyle = "#ffb0a0";
       if (p.dy > 40) hx.fillRect(p.x - 1, p.y - 4, 3, 1);
       else if (p.dy < -40) hx.fillRect(p.x - 1, p.y + 3, 3, 1);
