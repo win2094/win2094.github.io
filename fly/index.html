@@ -628,52 +628,67 @@ header p { margin: 4px 0 0; color: var(--muted); font-size: 0.9rem; line-height:
   const playerJet = makeJet(GEO_PLAYER);
   scene.add(playerJet);
 
-  // Pilot + parachute + rescue jet (humanoid pilot, not a box)
+  // Pilot + parachute + rescue jet (chunky humanoid, readable at chase distance)
   const pilot = new T3.Group();
   {
-    const suit = new T3.MeshLambertMaterial({ color: 0x4a5a48 });
-    const skin = new T3.MeshLambertMaterial({ color: 0xc9a07a });
-    const harness = new T3.MeshLambertMaterial({ color: 0xd8c060 });
-    const head = new T3.Mesh(new T3.SphereGeometry(0.32, 10, 8), skin);
-    head.position.y = 1.55;
-    pilot.add(head);
-    const helm = new T3.Mesh(new T3.SphereGeometry(0.34, 10, 8, 0, Math.PI * 2, 0, Math.PI * 0.55), new T3.MeshLambertMaterial({ color: 0x1a2228 }));
-    helm.position.y = 1.62;
-    pilot.add(helm);
-    const torso = new T3.Mesh(new T3.CylinderGeometry(0.38, 0.42, 0.95, 10), suit);
-    torso.position.y = 0.95;
-    pilot.add(torso);
-    const belt = new T3.Mesh(new T3.TorusGeometry(0.4, 0.07, 6, 12), harness);
+    const suit = new T3.MeshLambertMaterial({ color: 0x3e6a45 });
+    const skin = new T3.MeshLambertMaterial({ color: 0xd2a57a });
+    const harness = new T3.MeshLambertMaterial({ color: 0xe0c050 });
+    const fig = new T3.Group();
+    const head = new T3.Mesh(new T3.SphereGeometry(0.55, 10, 8), skin);
+    head.position.y = 2.55;
+    fig.add(head);
+    const helm = new T3.Mesh(new T3.SphereGeometry(0.58, 10, 8, 0, Math.PI * 2, 0, Math.PI * 0.58), new T3.MeshLambertMaterial({ color: 0x141a20 }));
+    helm.position.y = 2.65;
+    fig.add(helm);
+    const visor = new T3.Mesh(new T3.SphereGeometry(0.4, 8, 6, 0, Math.PI, 0.4, 0.8), new T3.MeshLambertMaterial({ color: 0x2a90a8, transparent: true, opacity: 0.85 }));
+    visor.position.set(0, 2.55, 0.28);
+    fig.add(visor);
+    const torso = new T3.Mesh(new T3.CylinderGeometry(0.7, 0.78, 1.6, 10), suit);
+    torso.position.y = 1.5;
+    fig.add(torso);
+    const pack = new T3.Mesh(new T3.BoxGeometry(0.9, 1.0, 0.45), harness);
+    pack.position.set(0, 1.55, -0.55);
+    fig.add(pack);
+    const belt = new T3.Mesh(new T3.TorusGeometry(0.72, 0.12, 6, 14), harness);
     belt.rotation.x = Math.PI / 2;
-    belt.position.y = 0.55;
-    pilot.add(belt);
+    belt.position.y = 0.85;
+    fig.add(belt);
     for (const sx of [-1, 1]) {
-      const arm = new T3.Mesh(new T3.CylinderGeometry(0.1, 0.1, 0.7, 6), suit);
-      arm.position.set(sx * 0.52, 1.05, 0);
-      arm.rotation.z = sx * 0.35;
-      pilot.add(arm);
-      const leg = new T3.Mesh(new T3.CylinderGeometry(0.12, 0.14, 0.75, 6), suit);
-      leg.position.set(sx * 0.18, 0.15, 0);
-      pilot.add(leg);
+      const arm = new T3.Mesh(new T3.CylinderGeometry(0.18, 0.18, 1.15, 6), suit);
+      arm.position.set(sx * 0.95, 1.65, 0);
+      arm.rotation.z = sx * 0.45;
+      fig.add(arm);
+      const hand = new T3.Mesh(new T3.SphereGeometry(0.2, 6, 6), skin);
+      hand.position.set(sx * 1.35, 1.15, 0.1);
+      fig.add(hand);
+      const leg = new T3.Mesh(new T3.CylinderGeometry(0.22, 0.26, 1.25, 6), suit);
+      leg.position.set(sx * 0.32, 0.2, 0);
+      fig.add(leg);
+      const boot = new T3.Mesh(new T3.BoxGeometry(0.35, 0.28, 0.55), new T3.MeshLambertMaterial({ color: 0x22262a }));
+      boot.position.set(sx * 0.32, -0.45, 0.1);
+      fig.add(boot);
     }
-    const cg = new T3.SphereGeometry(4.6, 12, 5, 0, Math.PI * 2, 0, Math.PI / 2);
+    fig.scale.setScalar(1.35);
+    pilot.add(fig);
+    const cg = new T3.SphereGeometry(7.2, 14, 6, 0, Math.PI * 2, 0, Math.PI / 2);
     const cols = [];
-    const p = cg.attributes.position;
-    for (let i = 0; i < p.count; i++) {
-      const sector = Math.floor(((Math.atan2(p.getZ(i), p.getX(i)) + Math.PI) / (Math.PI * 2)) * 12);
+    const pp = cg.attributes.position;
+    for (let i = 0; i < pp.count; i++) {
+      const sector = Math.floor(((Math.atan2(pp.getZ(i), pp.getX(i)) + Math.PI) / (Math.PI * 2)) * 12);
       const c = new T3.Color(sector % 2 ? 0xd82020 : 0xf4f4f4);
       cols.push(c.r, c.g, c.b);
     }
     cg.setAttribute("color", new T3.Float32BufferAttribute(cols, 3));
     const chute = new T3.Mesh(cg, new T3.MeshLambertMaterial({ vertexColors: true, side: T3.DoubleSide }));
-    chute.position.y = 5.4;
+    chute.position.y = 9.2;
     chute.name = "chute";
     pilot.add(chute);
     const lineGeo = new T3.BufferGeometry().setFromPoints([
-      new T3.Vector3(-3.8, 5.2, 0), new T3.Vector3(0, 1.4, 0), new T3.Vector3(3.8, 5.2, 0),
-      new T3.Vector3(0, 1.4, 0), new T3.Vector3(0, 5.2, 3.8), new T3.Vector3(0, 1.4, 0), new T3.Vector3(0, 5.2, -3.8),
+      new T3.Vector3(-5.5, 8.8, 0), new T3.Vector3(0, 2.8, 0), new T3.Vector3(5.5, 8.8, 0),
+      new T3.Vector3(0, 2.8, 0), new T3.Vector3(0, 8.8, 5.5), new T3.Vector3(0, 2.8, 0), new T3.Vector3(0, 8.8, -5.5),
     ]);
-    pilot.add(new T3.Line(lineGeo, new T3.LineBasicMaterial({ color: 0x888888 })));
+    pilot.add(new T3.Line(lineGeo, new T3.LineBasicMaterial({ color: 0xaaaaaa })));
   }
   pilot.visible = false;
   scene.add(pilot);
