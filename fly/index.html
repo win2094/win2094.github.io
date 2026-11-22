@@ -2,8 +2,9 @@
 <html lang="zh-Hant">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>FLY 3D — After Burner style</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <title>FLY ACE — F-22 After Burner</title>
   <style>
 :root {
   --bg: #0a101c;
@@ -17,6 +18,7 @@ html, body {
   background: radial-gradient(1000px 600px at 50% -20%, #1a2740, var(--bg));
   color: var(--ink);
   font-family: "IBM Plex Sans", "Segoe UI", sans-serif;
+  -webkit-text-size-adjust: 100%;
 }
 body { display: grid; place-items: center; padding: 12px; }
 .wrap { width: min(1100px, 100%); display: grid; gap: 10px; }
@@ -29,6 +31,9 @@ header p { margin: 4px 0 0; color: var(--muted); font-size: 0.9rem; line-height:
   border: 2px solid #24324d;
   border-radius: 6px;
   overflow: hidden;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
 }
 .stage canvas {
   position: absolute;
@@ -55,31 +60,118 @@ header p { margin: 4px 0 0; color: var(--muted); font-size: 0.9rem; line-height:
   padding: 1px 6px;
   color: var(--ink);
 }
+
+/* Mobile touch overlay */
+#touch-ui {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 5;
+}
+#touch-ui[hidden] { display: none !important; }
+.stick {
+  position: absolute;
+  left: 4%;
+  bottom: 8%;
+  width: 112px;
+  height: 112px;
+  border: 2px solid rgba(180, 220, 255, 0.35);
+  border-radius: 50%;
+  background: rgba(10, 20, 36, 0.35);
+  pointer-events: none;
+}
+#stick-knob {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 44px;
+  height: 44px;
+  margin: -22px 0 0 -22px;
+  border-radius: 50%;
+  background: rgba(200, 230, 255, 0.45);
+  border: 2px solid rgba(255, 255, 255, 0.55);
+  transition: transform 0.05s linear;
+}
+.btns {
+  position: absolute;
+  right: 3%;
+  bottom: 6%;
+  display: grid;
+  grid-template-columns: repeat(2, 64px);
+  gap: 10px;
+  pointer-events: auto;
+}
+.btns button {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.4);
+  background: rgba(20, 32, 52, 0.55);
+  color: #e8f0ff;
+  font: 700 12px/1 "IBM Plex Sans", sans-serif;
+  letter-spacing: 0.04em;
+  pointer-events: auto;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: none;
+}
+.btns button:active,
+.btns button.held {
+  background: rgba(240, 120, 40, 0.55);
+  border-color: #ffb060;
+}
+#btn-mis { border-color: rgba(240, 160, 40, 0.7); }
+#btn-rev { border-color: rgba(80, 200, 255, 0.7); }
+#btn-boost { border-color: rgba(255, 220, 80, 0.7); }
+
+@media (max-width: 720px) {
+  body { padding: 6px; align-content: start; }
+  header p { display: none; }
+  .help { font-size: 0.75rem; }
+  .stage { aspect-ratio: 16 / 11; width: 100%; }
+  .stick { width: 96px; height: 96px; }
+  .btns { grid-template-columns: repeat(2, 56px); gap: 8px; }
+  .btns button { width: 56px; height: 56px; font-size: 11px; }
+}
+@media (orientation: landscape) and (max-height: 500px) {
+  header { display: none; }
+  .help { display: none; }
+  body { padding: 0; }
+  .wrap { width: 100%; max-width: none; }
+  .stage {
+    aspect-ratio: auto;
+    height: 100dvh;
+    border: 0;
+    border-radius: 0;
+  }
+}
 </style>
 </head>
 <body>
   <div class="wrap">
     <header>
-      <h1>FLY 3D · v5</h1>
-      <p>真 3D（three.js）· F-22 真 3D · 打沉 BOSS 先過關：戰艦 → 大戰車 → 空中要塞 → 航空母艦 → 皇牌機師 → 再循環 · 第 10 關起有黑色 F-18 亂入（唔使打） · 雷達紫色方格＝BOSS · 沖出火網機尾視角 · 地平線唔跟 bank 轉 · 360° 自由飛 · 導彈 LOCK · 機槍</p>
+      <h1>FLY 3D · v6</h1>
+      <p>F-22 · BOSS 關卡循環（難度每 LOOP 上升）· 導彈 10 發後裝填 · 散彈可打落導彈 · 手機觸控／鍵盤／滑鼠都得</p>
     </header>
     <div class="stage">
       <canvas id="view"></canvas>
       <canvas id="hud"></canvas>
+      <div id="touch-ui" hidden>
+        <div class="stick" aria-hidden="true"><div id="stick-knob"></div></div>
+        <div class="btns">
+          <button type="button" id="btn-gun">機槍</button>
+          <button type="button" id="btn-mis">導彈</button>
+          <button type="button" id="btn-rev">反轉</button>
+          <button type="button" id="btn-boost">加速</button>
+        </div>
+      </div>
     </div>
     <div class="help">
-      <span><kbd>E</kbd> 攀升（拉機頭，按住可筋斗）</span>
-      <span><kbd>D</kbd> 下降（壓機頭）</span>
-      <span><kbd>S</kbd>/<kbd>F</kbd> 左／右側傾轉彎</span>
-      <span><kbd>Space</kbd> 危急反轉（180° 急轉＋熱焰彈，5 秒冷卻）</span>
-      <span><kbd>J</kbd>／左鍵 機槍</span>
-      <span><kbd>K</kbd>／右鍵 導彈（先 LOCK）</span>
-      <span><kbd>Shift</kbd> 加速</span>
-      <span><kbd>M</kbd> 靜音</span>
-      <span><kbd>R</kbd> 重開</span>
-      <span>BOSS 炮台可以逐個打爆（GUNS 數目），打爆主體 HP 就過關</span>
-      <span>網址加 <code>?stage=5</code> 可直接打皇牌機師</span>
-      <span>方向鍵／滑鼠亦可操控 · 撳一下畫面或任何鍵開聲</span>
+      <span><kbd>E</kbd> 攀升 · <kbd>D</kbd> 下降 · <kbd>S</kbd>/<kbd>F</kbd> 轉彎</span>
+      <span><kbd>Space</kbd> 危急反轉 · <kbd>J</kbd> 機槍 · <kbd>K</kbd> 導彈（10 發後冷卻裝填）</span>
+      <span><kbd>Shift</kbd> 加速 · <kbd>M</kbd> 靜音 · <kbd>R</kbd> 重開</span>
+      <span>手機：左半虛擬搖桿，右下按鈕（機槍／導彈／反轉／加速）</span>
+      <span>BOSS 散彈可打落你嘅導彈 · 每過一循環（LOOP）難度上升</span>
+      <span>撳一下畫面或任何鍵開聲</span>
     </div>
   </div>
   <script>
@@ -581,7 +673,7 @@ header p { margin: 4px 0 0; color: var(--muted); font-size: 0.9rem; line-height:
     scene.add(m);
     bullets.push({
       m, vel: dir.clone().multiplyScalar(speed), friendly,
-      life: o.life || 1.2, dmg: o.dmg || 5, r: o.r || 3.8,
+      life: o.life || 1.2, dmg: o.dmg || 5, r: o.r || 3.8, pellet: !!o.pellet,
     });
   }
   // Slow, wide, easy-to-see scatter burst (boss flak / 散彈)
@@ -622,6 +714,7 @@ header p { margin: 4px 0 0; color: var(--muted); font-size: 0.9rem; line-height:
     q: new T3.Quaternion(),
     bank: 0, sx: 0, sy: 0, speed: 60,
     hp: 100, invuln: 0, gunCd: 0, misCd: 0, gunSide: 1,
+    misAmmo: 10, misReload: 0, misMax: 10, misReloadTime: 8,
     rev: 0, revDir: 1, revCd: 0, revReq: false, lockState: 0,
     score: 0, mode: "fly", hitFlash: 0,
   };
@@ -669,9 +762,9 @@ header p { margin: 4px 0 0; color: var(--muted); font-size: 0.9rem; line-height:
       boot.position.set(sx * 0.32, -0.45, 0.1);
       fig.add(boot);
     }
-    fig.scale.setScalar(1.35);
+    fig.scale.setScalar(0.48);
     pilot.add(fig);
-    const cg = new T3.SphereGeometry(7.2, 14, 6, 0, Math.PI * 2, 0, Math.PI / 2);
+    const cg = new T3.SphereGeometry(2.6, 12, 5, 0, Math.PI * 2, 0, Math.PI / 2);
     const cols = [];
     const pp = cg.attributes.position;
     for (let i = 0; i < pp.count; i++) {
@@ -681,12 +774,12 @@ header p { margin: 4px 0 0; color: var(--muted); font-size: 0.9rem; line-height:
     }
     cg.setAttribute("color", new T3.Float32BufferAttribute(cols, 3));
     const chute = new T3.Mesh(cg, new T3.MeshLambertMaterial({ vertexColors: true, side: T3.DoubleSide }));
-    chute.position.y = 9.2;
+    chute.position.y = 3.4;
     chute.name = "chute";
     pilot.add(chute);
     const lineGeo = new T3.BufferGeometry().setFromPoints([
-      new T3.Vector3(-5.5, 8.8, 0), new T3.Vector3(0, 2.8, 0), new T3.Vector3(5.5, 8.8, 0),
-      new T3.Vector3(0, 2.8, 0), new T3.Vector3(0, 8.8, 5.5), new T3.Vector3(0, 2.8, 0), new T3.Vector3(0, 8.8, -5.5),
+      new T3.Vector3(-2.1, 3.2, 0), new T3.Vector3(0, 1.1, 0), new T3.Vector3(2.1, 3.2, 0),
+      new T3.Vector3(0, 1.1, 0), new T3.Vector3(0, 3.2, 2.1), new T3.Vector3(0, 1.1, 0), new T3.Vector3(0, 3.2, -2.1),
     ]);
     pilot.add(new T3.Line(lineGeo, new T3.LineBasicMaterial({ color: 0xaaaaaa })));
   }
@@ -723,7 +816,7 @@ header p { margin: 4px 0 0; color: var(--muted); font-size: 0.9rem; line-height:
       hp: isAce ? 55 : 30, isAce,
       cd: rnd(2, 3.5), lockT: 0, lockP: 0, mcd: rnd(10, 16),
       attack: Math.random() < 0.4, modeT: rnd(3, 9), roamTo: new T3.Vector3(rnd(-500, 500), 40, rnd(-500, 500)),
-      speed: isAce ? rnd(68, 80) : rnd(48, 62),
+      speed: (isAce ? rnd(68, 80) : rnd(48, 62)) * (1 + Math.floor(stage.n / BOSS_KINDS.length) * 0.08),
       aim: new T3.Vector3(rnd(-40, 40), rnd(-15, 25), rnd(-30, 30)),
     });
   }
@@ -847,9 +940,13 @@ header p { margin: 4px 0 0; color: var(--muted); font-size: 0.9rem; line-height:
     };
   })();
 
-  // ── Input ───────────────────────────────────────────────────
+  // ── Input (keyboard / mouse / touch) ────────────────────────
   const keys = {};
   const mouse = { inside: false, x: 0, y: 0, l: false, r: false, rEdge: false };
+  const touchCtl = {
+    stickId: null, stickX: 0, stickY: 0, active: false,
+    gun: false, boost: false,
+  };
   addEventListener("keydown", (e) => {
     sfx.init();
     const k = e.key.toLowerCase();
@@ -864,6 +961,7 @@ header p { margin: 4px 0 0; color: var(--muted); font-size: 0.9rem; line-height:
   view.addEventListener("pointerenter", () => { mouse.inside = true; });
   view.addEventListener("pointerleave", () => { mouse.inside = false; });
   view.addEventListener("pointermove", (e) => {
+    if (touchCtl.stickId != null) return;
     const r = view.getBoundingClientRect();
     mouse.x = ((e.clientX - r.left) / r.width) * 2 - 1;
     mouse.y = ((e.clientY - r.top) / r.height) * 2 - 1;
@@ -871,6 +969,7 @@ header p { margin: 4px 0 0; color: var(--muted); font-size: 0.9rem; line-height:
   });
   view.addEventListener("pointerdown", (e) => {
     sfx.init();
+    if (e.pointerType === "touch") return;
     if (e.button === 0) mouse.l = true;
     if (e.button === 2) { mouse.r = true; mouse.rEdge = true; }
   });
@@ -880,10 +979,84 @@ header p { margin: 4px 0 0; color: var(--muted); font-size: 0.9rem; line-height:
   });
   view.addEventListener("contextmenu", (e) => e.preventDefault());
 
+  // Touch: left half = virtual stick, on-screen buttons for fire / missile / reverse / boost
+  const stageEl = document.querySelector(".stage");
+  const touchUI = document.getElementById("touch-ui");
+  function isTouchDevice() {
+    return matchMedia("(pointer: coarse)").matches || navigator.maxTouchPoints > 0;
+  }
+  if (touchUI) touchUI.hidden = !isTouchDevice();
+  function bindPad(id, on, off) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    const down = (e) => { e.preventDefault(); sfx.init(); on(); };
+    const up = (e) => { e.preventDefault(); off(); };
+    el.addEventListener("pointerdown", down);
+    el.addEventListener("pointerup", up);
+    el.addEventListener("pointercancel", up);
+    el.addEventListener("pointerleave", up);
+  }
+  bindPad("btn-gun", () => { touchCtl.gun = true; }, () => { touchCtl.gun = false; });
+  bindPad("btn-mis", () => { mouse.rEdge = true; }, () => {});
+  bindPad("btn-rev", () => { player.revReq = true; }, () => {});
+  bindPad("btn-boost", () => { touchCtl.boost = true; }, () => { touchCtl.boost = false; });
+  bindPad("btn-mute", () => { sfx.toggleMute(); }, () => {});
+
+  function setStickFromEvent(e, rect) {
+    const cx = rect.left + rect.width * 0.22;
+    const cy = rect.top + rect.height * 0.72;
+    const rad = Math.min(rect.width, rect.height) * 0.16;
+    let dx = (e.clientX - cx) / rad;
+    let dy = (e.clientY - cy) / rad;
+    const len = Math.hypot(dx, dy) || 1;
+    if (len > 1) { dx /= len; dy /= len; }
+    touchCtl.stickX = clamp(dx, -1, 1);
+    touchCtl.stickY = clamp(-dy, -1, 1);
+    touchCtl.active = true;
+    const knob = document.getElementById("stick-knob");
+    if (knob) {
+      knob.style.transform = `translate(${dx * 28}px, ${-touchCtl.stickY * 28}px)`;
+    }
+  }
+  function onStickDown(e) {
+    if (e.pointerType !== "touch" && e.pointerType !== "pen") return;
+    const rect = stageEl.getBoundingClientRect();
+    const nx = (e.clientX - rect.left) / rect.width;
+    if (nx > 0.48) return; // right side reserved for buttons
+    e.preventDefault();
+    sfx.init();
+    touchCtl.stickId = e.pointerId;
+    stageEl.setPointerCapture(e.pointerId);
+    setStickFromEvent(e, rect);
+  }
+  function onStickMove(e) {
+    if (e.pointerId !== touchCtl.stickId) return;
+    e.preventDefault();
+    setStickFromEvent(e, stageEl.getBoundingClientRect());
+  }
+  function onStickUp(e) {
+    if (e.pointerId !== touchCtl.stickId) return;
+    touchCtl.stickId = null;
+    touchCtl.stickX = 0;
+    touchCtl.stickY = 0;
+    touchCtl.active = false;
+    const knob = document.getElementById("stick-knob");
+    if (knob) knob.style.transform = "translate(0,0)";
+  }
+  stageEl.addEventListener("pointerdown", onStickDown, { passive: false });
+  stageEl.addEventListener("pointermove", onStickMove, { passive: false });
+  stageEl.addEventListener("pointerup", onStickUp);
+  stageEl.addEventListener("pointercancel", onStickUp);
+  // Stop page scroll while playing on phones
+  stageEl.addEventListener("touchmove", (e) => e.preventDefault(), { passive: false });
+
   function readStick() {
     let x = 0;
     let y = 0;
-    if (mouse.inside) {
+    if (touchCtl.active || touchCtl.stickId != null) {
+      x = touchCtl.stickX;
+      y = touchCtl.stickY;
+    } else if (mouse.inside) {
       const dz = (v) => (Math.abs(v) < 0.12 ? 0 : (v - Math.sign(v) * 0.12) / 0.88);
       x = dz(mouse.x) * 1.3;
       y = -dz(mouse.y) * 1.3;
@@ -925,7 +1098,7 @@ header p { margin: 4px 0 0; color: var(--muted); font-size: 0.9rem; line-height:
     eLaunchCd = 6;
     player.pos.set(T * 0.5, 75, T * 0.05);
     player.q.identity();
-    Object.assign(player, { bank: 0, sx: 0, sy: 0, speed: 60, hp: 100, invuln: 1.5, score: 0, mode: "fly", rev: 0, revCd: 0 });
+    Object.assign(player, { bank: 0, sx: 0, sy: 0, speed: 60, hp: 100, invuln: 1.5, score: 0, mode: "fly", rev: 0, revCd: 0, misAmmo: 10, misReload: 0, misCd: 0 });
     playerJet.visible = true;
     pilot.visible = false;
     rescueJet.visible = false;
@@ -1115,7 +1288,7 @@ header p { margin: 4px 0 0; color: var(--muted); font-size: 0.9rem; line-height:
   function makeBoss(kind, loop) {
     const group = new T3.Group();
     const boss = {
-      kind, group, loop, parts: [], flames: [], hpMul: 1 + loop * 0.4,
+      kind, group, loop, parts: [], flames: [], hpMul: 1 + loop * 0.55 + loop * loop * 0.08,
       heading: new T3.Vector3(0, 0, 1), t: 0, dying: 0, boomT: 0, launchCd: 5, flakCd: rnd(2, 4),
       speed: 0, anchor: null, ang: 0, hull: null, core: null, hitT: 0,
     };
@@ -1443,15 +1616,16 @@ header p { margin: 4px 0 0; color: var(--muted); font-size: 0.9rem; line-height:
       if (p.kind === "turret") {
         // Slow, obvious scatter (散彈) — easy to see and dodge
         if (d < 520 && p.cd <= 0) {
-          p.cd = rnd(3.8, 5.5);
-          fireScatter(mz, player.pos, 5, 70, 0.55, { dmg: 7, r: 5.5, life: 5, vol: 0.3 * near });
+          const L = b.loop;
+          p.cd = rnd(3.8, 5.5) / (1 + L * 0.15);
+          fireScatter(mz, player.pos, 5 + Math.min(4, L), 70 + L * 5, 0.55, { dmg: 7 + L, r: 5.5, life: 5, vol: 0.3 * near });
         }
       } else if (p.kind === "main") {
         if (d < 780 && p.cd <= 0) {
-          p.cd = rnd(5.5, 7.5);
-          shoot(mz, aimDir(mz, 95, 0.015), 95, false, { shell: true, dmg: 16, r: 7, life: 6 });
-          // Extra wide slow scatter after the main shell
-          fireScatter(mz, player.pos, 7, 55, 0.7, { dmg: 8, r: 6, life: 5.5, vol: 0.45 * near });
+          const L = b.loop;
+          p.cd = rnd(5.5, 7.5) / (1 + L * 0.12);
+          shoot(mz, aimDir(mz, 95 + L * 8, 0.015), 95 + L * 8, false, { shell: true, dmg: 16 + L * 2, r: 7, life: 6 });
+          fireScatter(mz, player.pos, 7 + Math.min(3, L), 55 + L * 4, 0.7, { dmg: 8 + L, r: 6, life: 5.5, vol: 0.45 * near });
         }
       } else if (p.kind === "sam") {
         if (d < 800 && p.cd <= 0 && player.invuln <= 0 && player.rev <= 0) p.lockP += dt;
@@ -1482,9 +1656,10 @@ header p { margin: 4px 0 0; color: var(--muted); font-size: 0.9rem; line-height:
       b.flakCd -= dt;
       const dist = b.core.pos.distanceTo(player.pos);
       if (b.flakCd <= 0 && dist < 650) {
-        b.flakCd = rnd(4.2, 6.5);
+        const L = b.loop;
+        b.flakCd = rnd(4.2, 6.5) / (1 + L * 0.15);
         const from = b.core.pos.clone().add(new T3.Vector3(0, b.kind === "fortress" ? -8 : 12, 0));
-        fireScatter(from, player.pos, 7, 60, 0.85, { dmg: 8, r: 6, life: 5.5, vol: 0.4 });
+        fireScatter(from, player.pos, 7 + Math.min(4, L), 60 + L * 5, 0.85, { dmg: 8 + L, r: 6, life: 5.5, vol: 0.4 });
       }
     }
     if (flying && insideHull(b, player.pos, 1)) playerDown(true);
@@ -1521,7 +1696,7 @@ header p { margin: 4px 0 0; color: var(--muted); font-size: 0.9rem; line-height:
     deroll(player.q);
     player.q.normalize();
 
-    const boost = !!keys.shift;
+    const boost = !!(keys.shift || touchCtl.boost);
     player.speed = lerp(player.speed, boost ? 105 : 60, damp(1.4, dt));
     const f = fwdOf(player.q);
     player.pos.addScaledVector(f, player.speed * dt);
@@ -1534,10 +1709,17 @@ header p { margin: 4px 0 0; color: var(--muted); font-size: 0.9rem; line-height:
     player.invuln = Math.max(0, player.invuln - dt);
     player.gunCd -= dt;
     player.misCd -= dt;
+    if (player.misReload > 0) {
+      player.misReload -= dt;
+      if (player.misReload <= 0) {
+        player.misAmmo = player.misMax;
+        player.misReload = 0;
+      }
+    }
     const u = upOf(player.q);
     const r = rightOf(player.q);
 
-    if ((keys.j || mouse.l) && player.gunCd <= 0) {
+    if ((keys.j || mouse.l || touchCtl.gun) && player.gunCd <= 0) {
       player.gunCd = 0.06;
       player.gunSide *= -1;
       const muzzle = player.pos.clone().addScaledVector(r, player.gunSide * 1.6).addScaledVector(f, 3).addScaledVector(u, -0.3);
@@ -1559,8 +1741,10 @@ header p { margin: 4px 0 0; color: var(--muted); font-size: 0.9rem; line-height:
       else if (inCone) player.lockState = Math.max(player.lockState, 1);
     }
 
-    if (mouse.rEdge && player.misCd <= 0) {
+    if (mouse.rEdge && player.misCd <= 0 && player.misReload <= 0 && player.misAmmo > 0) {
       player.misCd = 0.3;
+      player.misAmmo--;
+      if (player.misAmmo <= 0) player.misReload = player.misReloadTime;
       const locked = lockables().filter((e) => e.lockT >= 1);
       let target = null;
       if (locked.length) {
@@ -1759,10 +1943,21 @@ header p { margin: 4px 0 0; color: var(--muted); font-size: 0.9rem; line-height:
         m.puffT = 0.025;
         puff(m.m.position.clone().addScaledVector(m.dir, -2), false);
       }
-      const hit = damageAt(m.m.position, 100, 70, 2);
-      if (hit) boom(m.m.position, 5);
-      if (hit || m.life <= 0 || m.m.position.y < groundH(m.m.position.x, m.m.position.z)) {
-        if (!hit) boom(m.m.position, 4);
+      let shotDown = false;
+      for (let bi = bullets.length - 1; bi >= 0; bi--) {
+        const b = bullets[bi];
+        if (b.friendly || !b.pellet) continue;
+        if (b.m.position.distanceTo(m.m.position) < (b.r || 5) + 2) {
+          shotDown = true;
+          scene.remove(b.m);
+          bullets.splice(bi, 1);
+          break;
+        }
+      }
+      const hit = !shotDown && damageAt(m.m.position, 100, 70, 2);
+      if (hit || shotDown) boom(m.m.position, shotDown ? 3 : 5);
+      if (hit || shotDown || m.life <= 0 || m.m.position.y < groundH(m.m.position.x, m.m.position.z)) {
+        if (!hit && !shotDown) boom(m.m.position, 4);
         scene.remove(m.m);
         missiles.splice(i, 1);
       }
@@ -1815,7 +2010,7 @@ header p { margin: 4px 0 0; color: var(--muted); font-size: 0.9rem; line-height:
     playerJet.quaternion.copy(player.q)
       .multiply(tmpQ.setFromAxisAngle(AX, -player.sy * 0.38))
       .multiply(new T3.Quaternion().setFromAxisAngle(AZ, player.bank));
-    flickerFlames(playerJet, !!keys.shift, time);
+    flickerFlames(playerJet, !!(keys.shift || touchCtl.boost), time);
     playerJet.updateMatrixWorld();
     pushTrail(trailL, playerJet.localToWorld(new T3.Vector3(-2.6 * S, 0, -1.2 * S)));
     pushTrail(trailR, playerJet.localToWorld(new T3.Vector3(2.6 * S, 0, -1.2 * S)));
@@ -1910,12 +2105,15 @@ header p { margin: 4px 0 0; color: var(--muted); font-size: 0.9rem; line-height:
       hx.fillRect(6, y, Math.round(70 * clamp(k, 0, 1)), h);
     };
     bar(RH - 46, 4, player.hp / 100, player.hp > 35 ? "#40d070" : "#ff4030", "#20302a");
-    bar(RH - 37, 3, player.misCd <= 0 ? 1 : 0, "#f0a020", "#5a4020");
+    const mslFill = player.misReload > 0
+      ? 1 - player.misReload / player.misReloadTime
+      : player.misAmmo / player.misMax;
+    bar(RH - 37, 3, mslFill, player.misReload > 0 ? "#806020" : "#f0a020", "#5a4020");
     bar(RH - 28, 3, 1 - player.revCd / 5, player.revCd <= 0 ? "#40c0ff" : "#2a5a78", "#18303e");
     hx.fillStyle = "#e8f0ff";
     hx.font = "8px monospace";
     hx.fillText("HP", 80, RH - 41);
-    hx.fillText("MSL", 80, RH - 32);
+    hx.fillText(player.misReload > 0 ? "RLD" : `MSL ${player.misAmmo}`, 80, RH - 32);
     hx.fillText("REV", 80, RH - 23);
     hx.fillText(`ALT ${Math.max(0, player.pos.y) | 0}  SPD ${player.speed | 0}`, 6, RH - 9);
     hx.font = "9px monospace";
@@ -1927,7 +2125,9 @@ header p { margin: 4px 0 0; color: var(--muted); font-size: 0.9rem; line-height:
   function drawBossHud() {
     hx.font = "9px monospace";
     hx.fillStyle = "#e8f0ff";
+    const loopN = Math.floor(stage.n / BOSS_KINDS.length) + 1;
     hx.fillText(`STAGE ${stage.n + 1}`, 6, 14);
+    if (loopN > 1) hx.fillText(`LOOP ${loopN}`, 6, 24);
     const b = stage.boss;
     if (b && b.dying <= 0) {
       const w = 150;
