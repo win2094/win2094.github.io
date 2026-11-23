@@ -24,6 +24,8 @@ This is a **user site** (`win2094.github.io`). Pages is already enabled on the r
 
 `.nojekyll` is present so GitHub does not process the site with Jekyll.
 
+**Important:** The live URL always serves **`main`**. The black-and-white pixel portfolio lives on PR branch `cursor/game-portfolio-site-bb47` until that PR is merged. Opening https://win2094.github.io/ before merge will still show the old plain-text page.
+
 ## Design
 
 Black-and-white **pixel** UI (Press Start 2P / DotGothic16), bilingual EN / 繁中 toggle.
