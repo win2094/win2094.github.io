@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <meta name="description" content="FLY ACE — F-22 afterburner dogfight under 1MB. Play at win2094.github.io/fly/" />
+  <meta name="description" content="FLY ACE — F-22 afterburner dogfight under 1MB. Play at /fly/." />
   <meta name="theme-color" content="#000000" />
   <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
   <title>FLY ACE — HSU Tsui</title>
@@ -23,31 +23,29 @@
     <button type="button" class="lang-toggle" data-lang-toggle>中文</button>
   </header>
 
-  <section class="detail-hero fly">
-    <div class="backdrop" aria-hidden="true"></div>
+  <section class="detail-hero">
+    <div class="art-plane" aria-hidden="true">
+      <img src="/assets/fly/hero-scene.svg" alt="" width="1600" height="900" />
+    </div>
     <div class="detail-copy">
       <div>
         <p class="kicker">03 · WEB · UNDER 1MB</p>
         <h1>FLY ACE</h1>
         <p class="lede">
-          <span data-i18n-en>F-22 afterburner dogfight that fits in a single HTML file — bosses, missile magazine, keyboard &amp; touch. Playable in the browser.</span>
-          <span data-i18n-zh>塞進單一 HTML 的 F-22 後燃機空戰——Boss、導彈彈匣、鍵盤與觸控。瀏覽器即可玩。</span>
+          <span data-i18n-en>F-22 dogfight in one HTML file. Bosses. Missiles. Touch.</span>
+          <span data-i18n-zh>單一 HTML 的 F-22 空戰。Boss。導彈。觸控。</span>
         </p>
         <div class="cta-row">
-          <a class="btn btn-primary" href="/fly/">
-            <span data-i18n-en>> PLAY NOW</span><span data-i18n-zh>> 立即遊玩</span>
-          </a>
-          <a class="btn btn-ghost" href="/#games">
-            <span data-i18n-en>&lt; BACK</span><span data-i18n-zh>&lt; 返回</span>
-          </a>
+          <a class="btn btn-primary" href="/fly/"><span data-i18n-en>PLAY NOW</span><span data-i18n-zh>立即玩</span></a>
+          <a class="btn btn-ghost" href="/#games"><span data-i18n-en>&lt; BACK</span><span data-i18n-zh>&lt; 返回</span></a>
         </div>
       </div>
-      <img class="icon-badge" src="/assets/fly/hero.svg" alt="FLY ACE pixel art" width="220" height="220" />
+      <img class="icon-badge" src="/assets/fly/hero.svg" alt="FLY ACE pixel jet" width="180" height="180" />
     </div>
   </section>
 
-  <a class="fly-stage-link reveal" href="/fly/" aria-label="Play FLY ACE">
-    <img src="/assets/fly/hero.svg" alt="" width="1040" height="585" />
+  <a class="fly-play-block reveal" href="/fly/" aria-label="Play FLY ACE">
+    <img src="/assets/fly/hero-scene.svg" alt="" width="1120" height="630" />
     <span class="play-label">
       <span data-i18n-en>PRESS START · /fly/</span>
       <span data-i18n-zh>按下開始 · /fly/</span>
@@ -55,46 +53,19 @@
   </a>
 
   <article class="prose reveal">
-    <h2>
-      <span data-i18n-en>> SELLING POINT_</span>
-      <span data-i18n-zh>> 賣點_</span>
-    </h2>
+    <h2><span data-i18n-en>> WHY_</span><span data-i18n-zh>> 賣點_</span></h2>
     <p>
-      <span data-i18n-en>The whole game ships as one static page at <a href="/fly/">/fly/</a> — currently ~684KB on disk, under the 1MB target. No install. No app store. Just open and fly.</span>
-      <span data-i18n-zh>整款遊戲以單一靜態頁掛在 <a href="/fly/">/fly/</a>——目前約 684KB，低於 1MB。免安裝、免商店，打開就能飛。</span>
+      <span data-i18n-en>Whole game at <a href="/fly/">/fly/</a> — ~684KB, under 1MB. No install.</span>
+      <span data-i18n-zh>整款遊戲在 <a href="/fly/">/fly/</a>——約 684KB，低於 1MB。免安裝。</span>
     </p>
-
-    <h2>
-      <span data-i18n-en>> CONTROLS_</span>
-      <span data-i18n-zh>> 操作_</span>
-    </h2>
+    <h2><span data-i18n-en>> CONTROLS_</span><span data-i18n-zh>> 操作_</span></h2>
     <ul>
-      <li>
-        <span data-i18n-en>E climb · D descend · S/F turn · W boost · X brake</span>
-        <span data-i18n-zh>E 攀升 · D 下降 · S/F 轉向 · W 加速 · X 減速</span>
-      </li>
-      <li>
-        <span data-i18n-en>Space invert · J gun · K missiles (reload after 10)</span>
-        <span data-i18n-zh>Space 反轉 · J 機槍 · K 導彈（10 發後裝填）</span>
-      </li>
-      <li>
-        <span data-i18n-en>Mobile: left stick + right action buttons</span>
-        <span data-i18n-zh>手機：左虛擬搖桿 + 右操作鍵</span>
-      </li>
+      <li>E / D · S / F · W boost · X brake · J gun · K missile</li>
+      <li><span data-i18n-en>Mobile: left stick + right buttons</span><span data-i18n-zh>手機：左搖桿 + 右按鍵</span></li>
     </ul>
-
-    <h2>
-      <span data-i18n-en>> LINKS_</span>
-      <span data-i18n-zh>> 連結_</span>
-    </h2>
-    <p>
-      Play:
-      <a href="https://win2094.github.io/fly/">https://win2094.github.io/fly/</a><br />
-      Source in this repo: <code>/fly/index.html</code> (unchanged playable build)
-    </p>
     <p class="missing-note">
-      <span data-i18n-en>No App Store listing for Fly. A real in-game screenshot or GIF would strengthen this page.</span>
-      <span data-i18n-zh>Fly 沒有 App Store 頁。若能提供實機截圖或 GIF，詳情頁會更完整。</span>
+      <span data-i18n-en>In-game screenshot / GIF still welcome.</span>
+      <span data-i18n-zh>仍歡迎補充實機截圖／GIF。</span>
     </p>
   </article>
 

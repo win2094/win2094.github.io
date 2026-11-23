@@ -26,121 +26,130 @@
   </header>
 
   <section class="hero" aria-label="Hero">
-    <div class="hero-visual" aria-hidden="true">
-      <img class="sky-plane" src="/assets/fly/hero.svg" width="720" height="405" alt="" />
+    <div class="hero-stage" aria-hidden="true">
+      <img class="hero-scene" src="/assets/fly/hero-scene.svg" width="1600" height="900" alt="" />
+      <div class="scan"></div>
+      <div class="vignette"></div>
     </div>
+
+    <div class="hero-bits" aria-hidden="true">
+      <div class="bit bit-a">
+        <img src="/assets/happy-polygon/icon.jpg" alt="" width="168" height="168" />
+      </div>
+      <div class="bit bit-b">
+        <img src="/assets/soso-sleep/icon.jpg" alt="" width="128" height="128" />
+      </div>
+      <div class="bit bit-c">
+        <img src="/assets/fly/hero-scene.svg" alt="" width="220" height="140" />
+      </div>
+    </div>
+
     <div class="hero-copy">
       <p class="brand-mark">HSU <em>TSUI</em></p>
       <h1>
-        <span data-i18n-en>PIXEL GAMES.<br/>QUICK THRILLS.<br/>QUIET NIGHTS.</span>
-        <span data-i18n-zh>黑白像素。<br/>瞬間爽感。<br/>安靜夜晚。</span>
+        <span data-i18n-en>PIXEL GAMES FOR NIGHT &amp; THROTTLE.</span>
+        <span data-i18n-zh>黑夜與油門的像素遊戲。</span>
       </h1>
       <p class="lede">
-        <span data-i18n-en>Independent work by Will Hsu (win2094) — neon arcade, sheep-counting sleep aid, and a browser jet under 1MB.</span>
-        <span data-i18n-zh>許萃（Will Hsu / win2094）的獨立作品——霓虹街機、數羊助眠，以及不到 1MB 的瀏覽器戰機。</span>
+        <span data-i18n-en>Arcade · sleep · a jet under 1MB.</span>
+        <span data-i18n-zh>街機 · 助眠 · 不到 1MB 的戰機。</span>
       </p>
       <div class="cta-row">
         <a class="btn btn-primary" href="#games">
-          <span data-i18n-en>BROWSE GAMES</span><span data-i18n-zh>瀏覽作品</span>
+          <span data-i18n-en>ENTER</span><span data-i18n-zh>進入</span>
         </a>
         <a class="btn btn-ghost" href="/fly/">
-          <span data-i18n-en>> PLAY FLY ACE</span><span data-i18n-zh>> 玩 FLY ACE</span>
+          <span data-i18n-en>PLAY FLY</span><span data-i18n-zh>玩 FLY</span>
         </a>
       </div>
     </div>
+    <div class="scroll-cue" aria-hidden="true">▼ SCROLL</div>
   </section>
 
-  <section class="section" id="games">
-    <div class="section-head reveal">
+  <p class="section-label" id="games">
+    <span data-i18n-en>> SELECT GAME_</span>
+    <span data-i18n-zh>> 選擇作品_</span>
+    <span class="blink">█</span>
+    <span class="hint">
+      <span data-i18n-en>3 titles</span>
+      <span data-i18n-zh>三款</span>
+    </span>
+  </p>
+
+  <div class="games-band-wrap">
+    <a class="game-band reveal" href="/games/happy-polygon/">
+      <div class="band-art">
+        <img class="shot" src="/assets/happy-polygon/shot-1.jpg" alt="Happy Polygon gameplay" width="900" height="1200" loading="lazy" />
+        <div class="pixel-overlay"></div>
+        <div class="stamp"><img src="/assets/happy-polygon/tile.svg" alt="" width="72" height="72" /></div>
+      </div>
+      <div class="band-copy">
+        <span class="tag">01 · iOS · CASUAL</span>
+        <h2>HAPPY POLYGON</h2>
+        <p>
+          <span data-i18n-en>Neon arcade suite. Pong, runners, pool, survival — Game Center ready.</span>
+          <span data-i18n-zh>霓虹街機合集。乒乓、跑酷、撞球、生存——Game Center 上榜。</span>
+        </p>
+        <span class="go"><span data-i18n-en>OPEN ></span><span data-i18n-zh>詳情 ></span></span>
+      </div>
+    </a>
+
+    <a class="game-band reveal" href="/games/soso-sleep/">
+      <div class="band-art">
+        <img class="shot" src="/assets/soso-sleep/shot-1.jpg" alt="SoSoSheep bedtime scene" width="900" height="1200" loading="lazy" />
+        <div class="pixel-overlay"></div>
+        <div class="stamp"><img src="/assets/soso-sleep/tile.svg" alt="" width="72" height="72" /></div>
+      </div>
+      <div class="band-copy">
+        <span class="tag">02 · iOS · HEALTH</span>
+        <h2>SOSO SLEEP</h2>
+        <p>
+          <span data-i18n-en>SoSoSheep — count sheep, soft soundscapes, fade into standby.</span>
+          <span data-i18n-zh>SoSoSheep——數羊、聲景，慢慢進入待機入睡。</span>
+        </p>
+        <span class="go"><span data-i18n-en>OPEN ></span><span data-i18n-zh>詳情 ></span></span>
+      </div>
+    </a>
+
+    <a class="game-band reveal" href="/games/fly/">
+      <div class="band-art">
+        <img class="shot" src="/assets/fly/hero-scene.svg" alt="FLY ACE pixel skyline" width="900" height="560" loading="lazy" />
+        <div class="pixel-overlay"></div>
+        <div class="stamp"><img src="/assets/fly/hero.svg" alt="" width="72" height="72" /></div>
+      </div>
+      <div class="band-copy">
+        <span class="tag">03 · WEB · &lt;1MB</span>
+        <h2>FLY ACE</h2>
+        <p>
+          <span data-i18n-en>F-22 dogfight in one HTML file. Bosses, missiles, touch.</span>
+          <span data-i18n-zh>單一 HTML 的 F-22 空戰。Boss、導彈、觸控。</span>
+        </p>
+        <span class="go"><span data-i18n-en>OPEN ></span><span data-i18n-zh>詳情 ></span></span>
+      </div>
+    </a>
+  </div>
+
+  <section class="about reveal" id="about">
+    <div>
       <h2>
-        <span data-i18n-en>> FEATURED GAMES_</span>
-        <span data-i18n-zh>> 精選作品_</span>
-        <span class="blink">█</span>
+        <span data-i18n-en>> ABOUT_</span>
+        <span data-i18n-zh>> 關於_</span>
       </h2>
       <p>
-        <span data-i18n-en>Three projects across arcade, wellness, and web.</span>
-        <span data-i18n-zh>橫跨街機、助眠與網頁的三款作品。</span>
+        <span data-i18n-en>Will Hsu (HSU Tsui / win2094) — Hong Kong indie developer &amp; UI/UX designer. Small games, clear interfaces.</span>
+        <span data-i18n-zh>許萃（Will Hsu / win2094）——香港獨立開發者與 UI/UX 設計師。小品遊戲，清楚介面。</span>
       </p>
     </div>
-
-    <ul class="game-list">
-      <li>
-        <a class="game-row reveal" href="/games/happy-polygon/">
-          <div class="meta">
-            <span class="tag">01 · iOS · CASUAL</span>
-            <h3>HAPPY POLYGON</h3>
-            <p class="desc">
-              <span data-i18n-en>Neon arcade suite — Pong, runners, pool, survival, and more with Game Center boards.</span>
-              <span data-i18n-zh>霓虹街機合集——乒乓、跑酷、撞球、生存等，支援 Game Center 排行榜。</span>
-            </p>
-          </div>
-          <img class="game-thumb" src="/assets/happy-polygon/icon.jpg" alt="Happy Polygon app icon" width="168" height="168" loading="lazy" />
-          <span class="go"><span data-i18n-en>OPEN ></span><span data-i18n-zh>詳情 ></span></span>
-        </a>
-      </li>
-      <li>
-        <a class="game-row reveal" href="/games/soso-sleep/">
-          <div class="meta">
-            <span class="tag">02 · iOS · HEALTH</span>
-            <h3>SOSO SLEEP</h3>
-            <p class="desc">
-              <span data-i18n-en>SoSoSheep — count sheep, soft soundscapes, and a gentle fade into standby.</span>
-              <span data-i18n-zh>SoSoSheep（數羊助眠）——輕點數羊、柔和聲景，慢慢進入待機入睡。</span>
-            </p>
-          </div>
-          <img class="game-thumb" src="/assets/soso-sleep/icon.jpg" alt="SoSoSheep app icon" width="168" height="168" loading="lazy" />
-          <span class="go"><span data-i18n-en>OPEN ></span><span data-i18n-zh>詳情 ></span></span>
-        </a>
-      </li>
-      <li>
-        <a class="game-row reveal" href="/games/fly/">
-          <div class="meta">
-            <span class="tag">03 · WEB · &lt;1MB</span>
-            <h3>FLY ACE</h3>
-            <p class="desc">
-              <span data-i18n-en>F-22 afterburner dogfight in the browser — bosses, missiles, touch controls.</span>
-              <span data-i18n-zh>瀏覽器裡的 F-22 後燃機空戰——Boss、導彈與觸控操作。</span>
-            </p>
-          </div>
-          <img class="game-thumb" src="/assets/fly/hero.svg" alt="FLY ACE pixel jet" width="168" height="168" loading="lazy" />
-          <span class="go"><span data-i18n-en>OPEN ></span><span data-i18n-zh>詳情 ></span></span>
-        </a>
-      </li>
-    </ul>
-  </section>
-
-  <section class="section about" id="about">
-    <div class="about-grid reveal">
-      <div>
-        <div class="section-head" style="margin-bottom:0">
-          <h2>
-            <span data-i18n-en>> ABOUT_</span>
-            <span data-i18n-zh>> 關於_</span>
-          </h2>
-        </div>
-        <p>
-          <span data-i18n-en>Hi, I’m Will Hsu (HSU Tsui / win2094), an independent developer and UI/UX designer based in Hong Kong. I craft minimalist apps and small games that solve daily challenges and bring a little joy.</span>
-          <span data-i18n-zh>你好，我是許萃（Will Hsu / win2094），香港獨立開發者與 UI/UX 設計師。我做簡潔的 App 與小品遊戲，解決日常小麻煩，也帶來一點趣味。</span>
-        </p>
-        <p>
-          <span data-i18n-en>Also ships utilities like COUPON Manager on the App Store under LAP WAI HSU.</span>
-          <span data-i18n-zh>亦以 LAP WAI HSU 名義在 App Store 發行 COUPON Manager 等工具。</span>
-        </p>
-      </div>
-      <div class="cta-row">
-        <a class="btn btn-ghost" href="https://apps.apple.com/developer/lap-wai-hsu/id6795877907" rel="noopener noreferrer">APP STORE</a>
-        <a class="btn btn-ghost" href="https://github.com/win2094" rel="noopener noreferrer">GITHUB</a>
-      </div>
+    <div class="cta-row">
+      <a class="btn btn-ghost" href="https://apps.apple.com/developer/lap-wai-hsu/id6795877907" rel="noopener noreferrer">APP STORE</a>
+      <a class="btn btn-ghost" href="https://github.com/win2094" rel="noopener noreferrer">GITHUB</a>
     </div>
   </section>
 
   <footer class="site-footer">
     <div class="inner">
-      <span>© <span id="y"></span> HSU TSUI · win2094.github.io</span>
-      <span>
-        <span data-i18n-en>GitHub Pages · /fly/ intact</span>
-        <span data-i18n-zh>GitHub Pages · 保留 /fly/</span>
-      </span>
+      <span>© <span id="y"></span> HSU TSUI</span>
+      <span>win2094.github.io</span>
     </div>
   </footer>
 

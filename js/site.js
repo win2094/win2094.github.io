@@ -33,4 +33,12 @@
     if (io) io.observe(el);
     else el.classList.add("is-in");
   });
+
+  // Ensure first game band visible even if IO is delayed
+  requestAnimationFrame(() => {
+    document.querySelectorAll(".reveal").forEach((el) => {
+      const rect = el.getBoundingClientRect();
+      if (rect.top < window.innerHeight * 0.92) el.classList.add("is-in");
+    });
+  });
 })();
