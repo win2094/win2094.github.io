@@ -20,7 +20,7 @@
     <nav class="nav-links" aria-label="Primary">
       <a href="#games"><span data-i18n-en>GAMES</span><span data-i18n-zh>作品</span></a>
       <a href="#about"><span data-i18n-en>ABOUT</span><span data-i18n-zh>關於</span></a>
-      <a href="/fly/"><span data-i18n-en>PLAY FLY</span><span data-i18n-zh>玩 FLY</span></a>
+      <a href="#play-fly"><span data-i18n-en>PLAY FLY</span><span data-i18n-zh>玩 FLY</span></a>
     </nav>
     <button type="button" class="lang-toggle" data-lang-toggle>中文</button>
   </header>
@@ -34,10 +34,10 @@
 
     <div class="hero-bits" aria-hidden="true">
       <div class="bit bit-a">
-        <img src="/assets/happy-polygon/icon.jpg" alt="" width="168" height="168" />
+        <img class="app-icon" src="/assets/happy-polygon/icon.jpg" alt="" width="168" height="168" />
       </div>
       <div class="bit bit-b">
-        <img src="/assets/soso-sleep/icon.jpg" alt="" width="128" height="128" />
+        <img class="app-icon" src="/assets/soso-sleep/icon.jpg" alt="" width="128" height="128" />
       </div>
       <div class="bit bit-c">
         <img src="/assets/fly/hero-scene.svg" alt="" width="220" height="140" />
@@ -51,28 +51,64 @@
         <span data-i18n-zh>黑夜與油門的像素遊戲。</span>
       </h1>
       <p class="lede">
-        <span data-i18n-en>Arcade · sleep · a jet under 1MB.</span>
-        <span data-i18n-zh>街機 · 助眠 · 不到 1MB 的戰機。</span>
+        <span data-i18n-en>Arcade · sleep · a jet under 1MB — play Fly on this page.</span>
+        <span data-i18n-zh>街機 · 助眠 · 不到 1MB 的戰機——主頁直接玩 Fly。</span>
       </p>
       <div class="cta-row">
-        <a class="btn btn-primary" href="#games">
-          <span data-i18n-en>ENTER</span><span data-i18n-zh>進入</span>
-        </a>
-        <a class="btn btn-ghost" href="/fly/">
+        <a class="btn btn-primary" href="#play-fly">
           <span data-i18n-en>PLAY FLY</span><span data-i18n-zh>玩 FLY</span>
+        </a>
+        <a class="btn btn-ghost" href="#games">
+          <span data-i18n-en>OTHER GAMES</span><span data-i18n-zh>其他作品</span>
         </a>
       </div>
     </div>
-    <div class="scroll-cue" aria-hidden="true">▼ SCROLL</div>
+    <div class="scroll-cue" aria-hidden="true">▼ PLAY</div>
+  </section>
+
+  <section class="fly-play" id="play-fly" aria-label="Play FLY ACE">
+    <div class="fly-play-head">
+      <p class="section-label" style="padding:0;margin:0;width:auto">
+        <span data-i18n-en>> FLY ACE · PLAY NOW_</span>
+        <span data-i18n-zh>> FLY ACE · 立即玩_</span>
+        <span class="blink">█</span>
+      </p>
+      <div class="cta-row">
+        <a class="btn btn-ghost" href="/fly/" target="_blank" rel="noopener">
+          <span data-i18n-en>FULL PAGE</span><span data-i18n-zh>全頁開啟</span>
+        </a>
+        <a class="btn btn-ghost" href="/games/fly/">
+          <span data-i18n-en>DETAILS</span><span data-i18n-zh>詳情</span>
+        </a>
+      </div>
+    </div>
+    <div class="fly-embed">
+      <iframe
+        id="fly-frame"
+        title="FLY ACE — playable"
+        src="/fly/"
+        loading="eager"
+        allow="autoplay; gamepad; fullscreen"
+        referrerpolicy="same-origin"
+      ></iframe>
+      <button type="button" class="fly-focus btn btn-primary" data-fly-focus>
+        <span data-i18n-en>CLICK TO FOCUS CONTROLS</span>
+        <span data-i18n-zh>撳一下開始操作</span>
+      </button>
+    </div>
+    <p class="fly-hint">
+      <span data-i18n-en>Same build as <a href="/fly/">/fly/</a> · under 1MB · keyboard or touch</span>
+      <span data-i18n-zh>與 <a href="/fly/">/fly/</a> 同一版本 · 不到 1MB · 鍵盤或觸控</span>
+    </p>
   </section>
 
   <p class="section-label" id="games">
-    <span data-i18n-en>> SELECT GAME_</span>
-    <span data-i18n-zh>> 選擇作品_</span>
+    <span data-i18n-en>> MORE GAMES_</span>
+    <span data-i18n-zh>> 更多作品_</span>
     <span class="blink">█</span>
     <span class="hint">
-      <span data-i18n-en>3 titles</span>
-      <span data-i18n-zh>三款</span>
+      <span data-i18n-en>iOS apps</span>
+      <span data-i18n-zh>iOS App</span>
     </span>
   </p>
 
@@ -81,7 +117,7 @@
       <div class="band-art">
         <img class="shot" src="/assets/happy-polygon/shot-1.jpg" alt="Happy Polygon gameplay" width="900" height="1200" loading="lazy" />
         <div class="pixel-overlay"></div>
-        <div class="stamp"><img src="/assets/happy-polygon/tile.svg" alt="" width="72" height="72" /></div>
+        <div class="stamp"><img class="app-icon" src="/assets/happy-polygon/icon.jpg" alt="" width="72" height="72" /></div>
       </div>
       <div class="band-copy">
         <span class="tag">01 · iOS · CASUAL</span>
@@ -98,7 +134,7 @@
       <div class="band-art">
         <img class="shot" src="/assets/soso-sleep/shot-1.jpg" alt="SoSoSheep bedtime scene" width="900" height="1200" loading="lazy" />
         <div class="pixel-overlay"></div>
-        <div class="stamp"><img src="/assets/soso-sleep/tile.svg" alt="" width="72" height="72" /></div>
+        <div class="stamp"><img class="app-icon" src="/assets/soso-sleep/icon.jpg" alt="" width="72" height="72" /></div>
       </div>
       <div class="band-copy">
         <span class="tag">02 · iOS · HEALTH</span>
@@ -111,22 +147,6 @@
       </div>
     </a>
 
-    <a class="game-band reveal" href="/games/fly/">
-      <div class="band-art">
-        <img class="shot" src="/assets/fly/hero-scene.svg" alt="FLY ACE pixel skyline" width="900" height="560" loading="lazy" />
-        <div class="pixel-overlay"></div>
-        <div class="stamp"><img src="/assets/fly/hero.svg" alt="" width="72" height="72" /></div>
-      </div>
-      <div class="band-copy">
-        <span class="tag">03 · WEB · &lt;1MB</span>
-        <h2>FLY ACE</h2>
-        <p>
-          <span data-i18n-en>F-22 dogfight in one HTML file. Bosses, missiles, touch.</span>
-          <span data-i18n-zh>單一 HTML 的 F-22 空戰。Boss、導彈、觸控。</span>
-        </p>
-        <span class="go"><span data-i18n-en>OPEN ></span><span data-i18n-zh>詳情 ></span></span>
-      </div>
-    </a>
   </div>
 
   <section class="about reveal" id="about">
