@@ -1,30 +1,152 @@
-Hi, I'm Will Hsu, an independent developer and UI/UX designer based in Hong Kong. I craft minimalist, intuitive, and user-centric mobile applications that solve daily challenges and bring joy to everyday life.
-Welcome to my developer portfolio and official app showcase.
-Featured iOS Applications
+<!DOCTYPE html>
+<html lang="en" data-lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="description" content="Games by HSU Tsui (Will Hsu / win2094) — Happy Polygon, SoSo Sleep, and FLY ACE." />
+  <meta name="theme-color" content="#000000" />
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  <title>HSU Tsui — Games</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DotGothic16&family=Noto+Sans+TC:wght@400;700&family=Press+Start+2P&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/css/site.css" />
+</head>
+<body>
+  <a class="skip" href="#games">Skip to games</a>
 
-1. COUPON Manager
-Category: Utilities / Productivity
-Description: A streamlined digital wallet designed to organize your coupons, promo codes, and membership cards. Never miss an expiration date again with intuitive visual organization and smart reminders.
-Key Features:
-Minimalist earth-tone interface for effortless viewing
-Categorized coupon storage with expiration tracking
-Quick visual preview for hassle-free store redemption
-Download on the App Store
+  <header class="site-nav">
+    <a class="brand" href="/">HSU <span>TSUI</span></a>
+    <nav class="nav-links" aria-label="Primary">
+      <a href="#games"><span data-i18n-en>GAMES</span><span data-i18n-zh>作品</span></a>
+      <a href="#about"><span data-i18n-en>ABOUT</span><span data-i18n-zh>關於</span></a>
+      <a href="/fly/"><span data-i18n-en>PLAY FLY</span><span data-i18n-zh>玩 FLY</span></a>
+    </nav>
+    <button type="button" class="lang-toggle" data-lang-toggle>中文</button>
+  </header>
 
-2. SoSoSheep (數羊助眠)
-Category: Health & Fitness / Lifestyle
-Description: A calming sleep aid and insomnia relief tool. Rediscover peaceful nights through gentle counting, relaxing audio environments, and stress-free bedtime routines.
-Key Features:
-Adorable sheep counting interactive animations
-Calming sleep soundscapes and ambient noise controls
-Eye-friendly dark mode designed specifically for nighttime use
- 
+  <section class="hero" aria-label="Hero">
+    <div class="hero-visual" aria-hidden="true">
+      <img class="sky-plane" src="/assets/fly/hero.svg" width="720" height="405" alt="" />
+    </div>
+    <div class="hero-copy">
+      <p class="brand-mark">HSU <em>TSUI</em></p>
+      <h1>
+        <span data-i18n-en>PIXEL GAMES.<br/>QUICK THRILLS.<br/>QUIET NIGHTS.</span>
+        <span data-i18n-zh>黑白像素。<br/>瞬間爽感。<br/>安靜夜晚。</span>
+      </h1>
+      <p class="lede">
+        <span data-i18n-en>Independent work by Will Hsu (win2094) — neon arcade, sheep-counting sleep aid, and a browser jet under 1MB.</span>
+        <span data-i18n-zh>許萃（Will Hsu / win2094）的獨立作品——霓虹街機、數羊助眠，以及不到 1MB 的瀏覽器戰機。</span>
+      </p>
+      <div class="cta-row">
+        <a class="btn btn-primary" href="#games">
+          <span data-i18n-en>BROWSE GAMES</span><span data-i18n-zh>瀏覽作品</span>
+        </a>
+        <a class="btn btn-ghost" href="/fly/">
+          <span data-i18n-en>> PLAY FLY ACE</span><span data-i18n-zh>> 玩 FLY ACE</span>
+        </a>
+      </div>
+    </div>
+  </section>
 
-3. HAPPY POLYGON
-Category: Games / Casual Arcade
-Description: A vibrant arcade suite with neon aesthetics. Test your reflexes with fast-paced minigames, enjoy smooth controls, and climb global leaderboards.
-Key Features:
-Vibrant geometric neon visuals optimized for OLED displays
-Suite of diverse casual arcade minigames
-Game Center leaderboards and high-score tracking 
+  <section class="section" id="games">
+    <div class="section-head reveal">
+      <h2>
+        <span data-i18n-en>> FEATURED GAMES_</span>
+        <span data-i18n-zh>> 精選作品_</span>
+        <span class="blink">█</span>
+      </h2>
+      <p>
+        <span data-i18n-en>Three projects across arcade, wellness, and web.</span>
+        <span data-i18n-zh>橫跨街機、助眠與網頁的三款作品。</span>
+      </p>
+    </div>
 
+    <ul class="game-list">
+      <li>
+        <a class="game-row reveal" href="/games/happy-polygon/">
+          <div class="meta">
+            <span class="tag">01 · iOS · CASUAL</span>
+            <h3>HAPPY POLYGON</h3>
+            <p class="desc">
+              <span data-i18n-en>Neon arcade suite — Pong, runners, pool, survival, and more with Game Center boards.</span>
+              <span data-i18n-zh>霓虹街機合集——乒乓、跑酷、撞球、生存等，支援 Game Center 排行榜。</span>
+            </p>
+          </div>
+          <img class="game-thumb" src="/assets/happy-polygon/icon.jpg" alt="Happy Polygon app icon" width="168" height="168" loading="lazy" />
+          <span class="go"><span data-i18n-en>OPEN ></span><span data-i18n-zh>詳情 ></span></span>
+        </a>
+      </li>
+      <li>
+        <a class="game-row reveal" href="/games/soso-sleep/">
+          <div class="meta">
+            <span class="tag">02 · iOS · HEALTH</span>
+            <h3>SOSO SLEEP</h3>
+            <p class="desc">
+              <span data-i18n-en>SoSoSheep — count sheep, soft soundscapes, and a gentle fade into standby.</span>
+              <span data-i18n-zh>SoSoSheep（數羊助眠）——輕點數羊、柔和聲景，慢慢進入待機入睡。</span>
+            </p>
+          </div>
+          <img class="game-thumb" src="/assets/soso-sleep/icon.jpg" alt="SoSoSheep app icon" width="168" height="168" loading="lazy" />
+          <span class="go"><span data-i18n-en>OPEN ></span><span data-i18n-zh>詳情 ></span></span>
+        </a>
+      </li>
+      <li>
+        <a class="game-row reveal" href="/games/fly/">
+          <div class="meta">
+            <span class="tag">03 · WEB · &lt;1MB</span>
+            <h3>FLY ACE</h3>
+            <p class="desc">
+              <span data-i18n-en>F-22 afterburner dogfight in the browser — bosses, missiles, touch controls.</span>
+              <span data-i18n-zh>瀏覽器裡的 F-22 後燃機空戰——Boss、導彈與觸控操作。</span>
+            </p>
+          </div>
+          <img class="game-thumb" src="/assets/fly/hero.svg" alt="FLY ACE pixel jet" width="168" height="168" loading="lazy" />
+          <span class="go"><span data-i18n-en>OPEN ></span><span data-i18n-zh>詳情 ></span></span>
+        </a>
+      </li>
+    </ul>
+  </section>
+
+  <section class="section about" id="about">
+    <div class="about-grid reveal">
+      <div>
+        <div class="section-head" style="margin-bottom:0">
+          <h2>
+            <span data-i18n-en>> ABOUT_</span>
+            <span data-i18n-zh>> 關於_</span>
+          </h2>
+        </div>
+        <p>
+          <span data-i18n-en>Hi, I’m Will Hsu (HSU Tsui / win2094), an independent developer and UI/UX designer based in Hong Kong. I craft minimalist apps and small games that solve daily challenges and bring a little joy.</span>
+          <span data-i18n-zh>你好，我是許萃（Will Hsu / win2094），香港獨立開發者與 UI/UX 設計師。我做簡潔的 App 與小品遊戲，解決日常小麻煩，也帶來一點趣味。</span>
+        </p>
+        <p>
+          <span data-i18n-en>Also ships utilities like COUPON Manager on the App Store under LAP WAI HSU.</span>
+          <span data-i18n-zh>亦以 LAP WAI HSU 名義在 App Store 發行 COUPON Manager 等工具。</span>
+        </p>
+      </div>
+      <div class="cta-row">
+        <a class="btn btn-ghost" href="https://apps.apple.com/developer/lap-wai-hsu/id6795877907" rel="noopener noreferrer">APP STORE</a>
+        <a class="btn btn-ghost" href="https://github.com/win2094" rel="noopener noreferrer">GITHUB</a>
+      </div>
+    </div>
+  </section>
+
+  <footer class="site-footer">
+    <div class="inner">
+      <span>© <span id="y"></span> HSU TSUI · win2094.github.io</span>
+      <span>
+        <span data-i18n-en>GitHub Pages · /fly/ intact</span>
+        <span data-i18n-zh>GitHub Pages · 保留 /fly/</span>
+      </span>
+    </div>
+  </footer>
+
+  <script>
+    document.getElementById("y").textContent = new Date().getFullYear();
+  </script>
+  <script src="/js/site.js" defer></script>
+</body>
+</html>

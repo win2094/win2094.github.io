@@ -1,0 +1,36 @@
+(() => {
+  const root = document.documentElement;
+  const stored = localStorage.getItem("hsu-lang");
+  const initial = stored === "zh" || stored === "en"
+    ? stored
+    : (navigator.language || "").toLowerCase().startsWith("zh") ? "zh" : "en";
+  root.dataset.lang = initial;
+
+  document.querySelectorAll("[data-lang-toggle]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const next = root.dataset.lang === "zh" ? "en" : "zh";
+      root.dataset.lang = next;
+      localStorage.setItem("hsu-lang", next);
+      btn.setAttribute("aria-label", next === "zh" ? "Switch to English" : "切換至中文");
+      btn.textContent = next === "zh" ? "EN" : "中文";
+    });
+    btn.textContent = initial === "zh" ? "EN" : "中文";
+    btn.setAttribute("aria-label", initial === "zh" ? "Switch to English" : "切換至中文");
+  });
+
+  const io = "IntersectionObserver" in window
+    ? new IntersectionObserver((entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            entry.target.classList.add("is-in");
+            io.unobserve(entry.target);
+          }
+        });
+      }, { threshold: 0.16 })
+    : null;
+
+  document.querySelectorAll(".reveal").forEach((el) => {
+    if (io) io.observe(el);
+    else el.classList.add("is-in");
+  });
+})();
