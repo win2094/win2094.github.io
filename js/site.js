@@ -41,4 +41,19 @@
       if (rect.top < window.innerHeight * 0.92) el.classList.add("is-in");
     });
   });
+
+  const flyEmbed = document.querySelector(".fly-embed");
+  const flyFrame = document.getElementById("fly-frame");
+  const flyFocus = document.querySelector("[data-fly-focus]");
+  if (flyEmbed && flyFrame && flyFocus) {
+    const focusFly = () => {
+      flyEmbed.classList.add("is-focused");
+      try { flyFrame.focus(); } catch (_) { /* ignore */ }
+    };
+    flyFocus.addEventListener("click", focusFly);
+    flyFrame.addEventListener("focus", () => flyEmbed.classList.add("is-focused"));
+    flyFrame.addEventListener("blur", () => {
+      // keep overlay hidden once played; avoid flicker when clicking inside game
+    });
+  }
 })();
