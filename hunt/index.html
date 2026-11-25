@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="zh-HK">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>鬥技場狩龍</title>
+<style>
+*{box-sizing:border-box;-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%;overflow:hidden;background:#000;color:#fff;font-family:"IBM Plex Sans","Segoe UI","Noto Sans HK",sans-serif;touch-action:none}
+canvas{display:block}
+#hud{position:fixed;inset:0;pointer-events:none;font-size:32px}
+.bar{height:30px;background:#0008;border:3px solid #fff8;border-radius:10px;overflow:hidden}
+.bar>div{height:100%;transition:width .15s}
+#ptop{position:absolute;left:16px;top:12px;width:min(46vw,520px)}
+#dtop{position:absolute;right:16px;top:12px;width:min(46vw,520px);text-align:right}
+.lbl{font-size:32px;font-weight:700;text-shadow:0 2px 4px #000;margin:4px 0}
+#btns{position:absolute;right:12px;top:150px;display:flex;flex-direction:column;gap:10px;pointer-events:auto}
+.sb{font-size:32px;padding:6px 14px;border-radius:12px;border:2px solid #fff8;background:#000a;color:#fff}
+#msg{position:absolute;left:50%;top:30%;transform:translate(-50%,-50%);font-size:52px;font-weight:800;text-shadow:0 3px 8px #000;text-align:center;white-space:nowrap}
+#tele{position:absolute;left:50%;top:44%;transform:translateX(-50%);font-size:40px;color:#ffcf40;font-weight:800;text-shadow:0 2px 6px #000}
+#touch{position:absolute;inset:0;pointer-events:none}
+#stick{position:absolute;left:30px;bottom:30px;width:220px;height:220px;border-radius:50%;background:#fff2;border:3px solid #fff5;pointer-events:auto}
+#knob{position:absolute;left:70px;top:70px;width:80px;height:80px;border-radius:50%;background:#fff6}
+#acts{position:absolute;right:20px;bottom:20px;display:grid;grid-template-columns:repeat(3,110px);gap:12px;pointer-events:auto}
+.ab{height:110px;border-radius:50%;border:3px solid #fff8;background:#0009;color:#fff;font-size:32px;font-weight:700}
+.panel{position:fixed;inset:0;background:#000c;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;font-size:36px;text-align:center;padding:20px;overflow:auto}
+.panel h1{font-size:60px;margin:0}
+.panel button{font-size:36px;padding:14px 28px;border-radius:14px;border:3px solid #ffcf40;background:#3a2410;color:#fff;min-width:320px}
+.row{display:flex;align-items:center;gap:16px;font-size:36px}
+.row button{min-width:80px;padding:6px 18px}
+.hidden{display:none!important}
+#keys{font-size:24px;opacity:.8}
+</style>
+<script type="importmap">{"imports":{"three":"https://unpkg.com/three@0.160.0/build/three.module.js"}}</script>
+</head>
+<body>
+<div id="hud">
+  <div id="ptop"><div class="lbl" id="pname">獵人</div><div class="bar"><div id="php" style="background:#3c3;width:100%"></div></div><div class="bar" style="height:18px;margin-top:6px"><div id="pst" style="background:#fc3;width:100%"></div></div><div class="lbl" id="pot">藥水 ×3</div></div>
+  <div id="dtop"><div class="lbl" id="dname">火龍</div><div class="bar"><div id="dhp" style="background:#d33;width:100%;margin-left:auto"></div></div><div class="lbl" id="tail">尾：完好</div></div>
+  <div id="btns"><button class="sb" id="mute">🔊 聲</button><button class="sb" id="restart">↻ 重新</button></div>
+  <div id="tele"></div><div id="msg"></div>
+  <div id="touch" class="hidden"><div id="stick"><div id="knob"></div></div>
+    <div id="acts"><button class="ab" data-a="potion">藥</button><button class="ab" data-a="special">技</button><button class="ab" data-a="dodge">閃</button><span></span><span></span><button class="ab" data-a="attack" style="background:#7a1a1a">斬</button></div></div>
+</div>
+<div class="panel" id="title"><h1>鬥技場狩龍</h1><div>揀武器：</div>
+  <button data-w="gs">大劍（慢、重、可蓄力）</button>
+  <button data-w="ss">單手劍（快、可格擋）</button>
+  <button data-w="db">雙刀（極快連擊）</button>
+  <div id="keys">電腦：WASD 移動、滑鼠左鍵/J 攻擊、右鍵/K 技（蓄力/格擋/亂舞）、空白鍵 閃避、Q 飲藥、拖滑鼠轉視角</div></div>
+<div class="panel hidden" id="stats"><h1 id="stitle">勝利！</h1><div id="spts"></div><div id="slist"></div><button id="snext">下一戰</button></div>
+<div class="panel hidden" id="over"><h1 id="otitle">狩獵失敗</h1><div id="otext"></div><button id="oagain">再嚟</button></div>
+<script type="module" src="game.js"></script>
+</body>
+</html>
