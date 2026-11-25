@@ -3,12 +3,13 @@ import * as THREE from 'three';
 const $ = id => document.getElementById(id);
 const ARENA = 38;
 
+// aggro 0→1 across fights: longer idle early, shorter late; windMul stretches telegraphs early
 const DRAGONS = [
-  { name: '火龍 雄火龍', body: 0xb3261e, belly: 0xe0a060, accent: 0x2a1a10, pattern: 'spots', horns: 'back', tail: 'club', breath: 'fire', hp: 700, dmg: 1.0, speed: 1.0 },
-  { name: '角龍 黑角龍', body: 0xc8a46a, belly: 0xe8d6a8, accent: 0x5a4020, pattern: 'none', horns: 'huge', tail: 'mace', breath: 'sand', hp: 900, dmg: 1.15, speed: 1.1 },
-  { name: '雷狼龍', body: 0x2d4f8a, belly: 0xe8d040, accent: 0xffe050, pattern: 'bands', horns: 'swept', tail: 'blade', breath: 'thunder', hp: 1100, dmg: 1.25, speed: 1.2 },
-  { name: '轟龍', body: 0xe0b030, belly: 0xf0e0b0, accent: 0x2050a0, pattern: 'stripes', horns: 'stub', tail: 'spike', breath: 'roar', hp: 1300, dmg: 1.4, speed: 1.3 },
-  { name: '黑龍 （終戰）', body: 0x15151a, belly: 0x3a2a30, accent: 0xa01020, pattern: 'veins', horns: 'crown', tail: 'long', breath: 'hellfire', hp: 2000, dmg: 1.6, speed: 1.25 },
+  { name: '火龍 雄火龍', body: 0xb3261e, belly: 0xe0a060, accent: 0x2a1a10, pattern: 'spots', horns: 'back', tail: 'club', breath: 'fire', hp: 700, dmg: 1.0, speed: 1.0, aggro: 0.35, windMul: 1.7 },
+  { name: '角龍 黑角龍', body: 0xc8a46a, belly: 0xe8d6a8, accent: 0x5a4020, pattern: 'none', horns: 'huge', tail: 'mace', breath: 'sand', hp: 900, dmg: 1.15, speed: 1.05, aggro: 0.5, windMul: 1.5 },
+  { name: '雷狼龍', body: 0x2d4f8a, belly: 0xe8d040, accent: 0xffe050, pattern: 'bands', horns: 'swept', tail: 'blade', breath: 'thunder', hp: 1100, dmg: 1.25, speed: 1.1, aggro: 0.65, windMul: 1.35 },
+  { name: '轟龍', body: 0xe0b030, belly: 0xf0e0b0, accent: 0x2050a0, pattern: 'stripes', horns: 'stub', tail: 'spike', breath: 'roar', hp: 1300, dmg: 1.4, speed: 1.15, aggro: 0.8, windMul: 1.2 },
+  { name: '黑龍 （終戰）', body: 0x15151a, belly: 0x3a2a30, accent: 0xa01020, pattern: 'veins', horns: 'crown', tail: 'long', breath: 'hellfire', hp: 2000, dmg: 1.6, speed: 1.2, aggro: 1.0, windMul: 1.05 },
 ];
 const BREATH_COL = { fire: 0xff6020, sand: 0xd8c090, thunder: 0x80c0ff, roar: 0xffffff, hellfire: 0xff1030 };
 
@@ -22,53 +23,131 @@ const WEAPONS = {
 const run = { weapon: 'gs', fight: 0, pts: 0, stats: { hp: 0, atk: 0, def: 0, sta: 0, spd: 0 } };
 const STAT_NAMES = { hp: '體力', atk: '攻擊', def: '防禦', sta: '耐力', spd: '速度' };
 
-// ---------- three setup ----------
-let renderer;
+// ---------- three setup (pixel-art 3D: low-res RT + nearest upscale) ----------
+const PIXEL_SCALE = 4;
+let renderer, hasWebGL = true;
 try {
-  renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+  renderer = new THREE.WebGLRenderer({ antialias: false, preserveDrawingBuffer: true, powerPreference: 'high-performance' });
 } catch (e) {
-  // Headless / no-GPU fallback so input (gamepad) can still be exercised
+  hasWebGL = false;
   const canvas = document.createElement('canvas');
   renderer = {
     domElement: canvas,
     shadowMap: { enabled: false },
     setPixelRatio() {},
-    setSize(w, h) { canvas.width = w; canvas.height = h; },
+    setSize(w, h) { canvas.width = w; canvas.height = h; canvas.style.width = w + 'px'; canvas.style.height = h + 'px'; },
+    setRenderTarget() {},
     render() {},
   };
   console.warn('WebGL unavailable; using canvas stub', e);
 }
-renderer.setPixelRatio?.(Math.min(devicePixelRatio, 2));
-if (renderer.shadowMap) renderer.shadowMap.enabled = true;
+renderer.setPixelRatio?.(1);
+if (renderer.shadowMap) renderer.shadowMap.enabled = false;
+renderer.domElement.style.touchAction = 'none';
 document.body.prepend(renderer.domElement);
+
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x87a8c8);
-scene.fog = new THREE.Fog(0x87a8c8, 60, 140);
-const camera = new THREE.PerspectiveCamera(60, 1, 0.1, 300);
-function resize() { renderer.setSize(innerWidth, innerHeight); camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); }
-addEventListener('resize', resize); resize();
+scene.background = new THREE.Color(0x6a90b0);
+scene.fog = new THREE.Fog(0x6a90b0, 55, 120);
+const camera = new THREE.PerspectiveCamera(58, 1, 0.1, 300);
 
-scene.add(new THREE.HemisphereLight(0xdde8ff, 0x664422, 0.9));
-const sun = new THREE.DirectionalLight(0xfff0d0, 1.6);
-sun.position.set(30, 50, 20); sun.castShadow = true;
-Object.assign(sun.shadow.camera, { left: -50, right: 50, top: 50, bottom: -50 });
-sun.shadow.mapSize.set(2048, 2048);
+let pixelRT = null;
+const blitCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+const blitScene = new THREE.Scene();
+const blitMat = new THREE.MeshBasicMaterial({ map: null });
+blitScene.add(new THREE.Mesh(new THREE.PlaneGeometry(2, 2), blitMat));
+
+function viewSize() {
+  const vv = window.visualViewport;
+  return {
+    w: Math.max(1, Math.round(vv ? vv.width : innerWidth)),
+    h: Math.max(1, Math.round(vv ? vv.height : innerHeight)),
+  };
+}
+let resizeTimer = 0;
+function resizeNow() {
+  const { w, h } = viewSize();
+  const pw = Math.max(120, Math.floor(w / PIXEL_SCALE));
+  const ph = Math.max(80, Math.floor(h / PIXEL_SCALE));
+  if (hasWebGL && THREE.WebGLRenderTarget) {
+    if (pixelRT) pixelRT.dispose();
+    pixelRT = new THREE.WebGLRenderTarget(pw, ph, {
+      minFilter: THREE.NearestFilter,
+      magFilter: THREE.NearestFilter,
+      generateMipmaps: false,
+      depthBuffer: true,
+    });
+    blitMat.map = pixelRT.texture;
+    blitMat.needsUpdate = true;
+  }
+  renderer.setSize(w, h, false);
+  renderer.domElement.style.width = w + 'px';
+  renderer.domElement.style.height = h + 'px';
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+}
+function resize() {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(resizeNow, 80);
+}
+addEventListener('resize', resize);
+if (window.visualViewport) {
+  visualViewport.addEventListener('resize', resize);
+  visualViewport.addEventListener('scroll', () => {
+    // keep canvas locked to visual viewport origin (address-bar show/hide)
+    const vv = visualViewport;
+    renderer.domElement.style.top = vv.offsetTop + 'px';
+    renderer.domElement.style.left = vv.offsetLeft + 'px';
+  });
+}
+resizeNow();
+
+// block pinch / double-tap zoom
+const blockZoom = e => { e.preventDefault(); };
+['gesturestart', 'gesturechange', 'gestureend'].forEach(ev => addEventListener(ev, blockZoom, { passive: false }));
+addEventListener('dblclick', blockZoom, { passive: false });
+document.addEventListener('touchmove', e => { if (e.touches.length > 1) e.preventDefault(); }, { passive: false });
+
+scene.add(new THREE.HemisphereLight(0xc8d8f0, 0x5a4020, 1.05));
+const sun = new THREE.DirectionalLight(0xffe8c0, 1.35);
+sun.position.set(28, 48, 18);
 scene.add(sun);
+scene.add(new THREE.AmbientLight(0x405060, 0.35));
 
-function canvasTex(w, h, draw) { const c = document.createElement('canvas'); c.width = w; c.height = h; draw(c.getContext('2d'), w, h); const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t; }
-// arena
-const sandTex = canvasTex(256, 256, (g, w, h) => { g.fillStyle = '#c9a66b'; g.fillRect(0, 0, w, h); for (let i = 0; i < 3000; i++) { g.fillStyle = `rgba(${90 + Math.random() * 80},${60 + Math.random() * 50},30,0.25)`; g.fillRect(Math.random() * w, Math.random() * h, 2, 2); } });
-sandTex.wrapS = sandTex.wrapT = THREE.RepeatWrapping; sandTex.repeat.set(10, 10);
-const ground = new THREE.Mesh(new THREE.CircleGeometry(ARENA + 4, 64), new THREE.MeshStandardMaterial({ map: sandTex, roughness: 1 }));
-ground.rotation.x = -Math.PI / 2; ground.receiveShadow = true; scene.add(ground);
-const wallMat = new THREE.MeshStandardMaterial({ color: 0x9a8670, roughness: 0.9 });
-const wall = new THREE.Mesh(new THREE.CylinderGeometry(ARENA + 4, ARENA + 4, 10, 64, 1, true), wallMat);
+function pixelizeTex(t) {
+  t.magFilter = THREE.NearestFilter;
+  t.minFilter = THREE.NearestFilter;
+  t.generateMipmaps = false;
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.needsUpdate = true;
+  return t;
+}
+function canvasTex(w, h, draw) {
+  const c = document.createElement('canvas'); c.width = w; c.height = h;
+  draw(c.getContext('2d'), w, h);
+  return pixelizeTex(new THREE.CanvasTexture(c));
+}
+// flat / toon materials, limited palette
+const std = c => new THREE.MeshLambertMaterial({ color: c, flatShading: true });
+// arena — chunky pixel sand
+const sandTex = canvasTex(64, 64, (g, w, h) => {
+  g.fillStyle = '#c9a66b'; g.fillRect(0, 0, w, h);
+  for (let i = 0; i < 180; i++) {
+    g.fillStyle = `rgb(${90 + (i % 5) * 16},${60 + (i % 3) * 18},30)`;
+    g.fillRect((i * 7) % w, (i * 11) % h, 2 + (i % 3), 2 + (i % 2));
+  }
+});
+sandTex.wrapS = sandTex.wrapT = THREE.RepeatWrapping; sandTex.repeat.set(8, 8);
+const ground = new THREE.Mesh(new THREE.CircleGeometry(ARENA + 4, 32), new THREE.MeshLambertMaterial({ map: sandTex, flatShading: true }));
+ground.rotation.x = -Math.PI / 2; scene.add(ground);
+const wallMat = std(0x8a7660);
+const wall = new THREE.Mesh(new THREE.CylinderGeometry(ARENA + 4, ARENA + 4, 10, 32, 1, true), wallMat);
 wall.material.side = THREE.BackSide; wall.position.y = 5; scene.add(wall);
-for (let i = 0; i < 32; i++) {
-  const a = i / 32 * Math.PI * 2;
+for (let i = 0; i < 24; i++) {
+  const a = i / 24 * Math.PI * 2;
   const p = new THREE.Mesh(new THREE.BoxGeometry(2, 14, 2), wallMat);
-  p.position.set(Math.cos(a) * (ARENA + 4), 7, Math.sin(a) * (ARENA + 4)); p.castShadow = true; scene.add(p);
-  const tier = new THREE.Mesh(new THREE.BoxGeometry(9, 4, 2), new THREE.MeshStandardMaterial({ color: 0x7a6650 }));
+  p.position.set(Math.cos(a) * (ARENA + 4), 7, Math.sin(a) * (ARENA + 4)); scene.add(p);
+  const tier = new THREE.Mesh(new THREE.BoxGeometry(9, 4, 2), std(0x6a5640));
   tier.position.set(Math.cos(a) * (ARENA + 9), 13, Math.sin(a) * (ARENA + 9)); tier.lookAt(0, 13, 0); scene.add(tier);
 }
 
@@ -88,7 +167,6 @@ function snd(freq, dur = 0.12, type = 'square', vol = 0.15, slide = 0) {
 $('mute').onclick = () => { muted = !muted; $('mute').textContent = muted ? '🔇 靜' : '🔊 聲'; };
 
 // ---------- player ----------
-const std = c => new THREE.MeshStandardMaterial({ color: c, roughness: 0.7 });
 const player = new THREE.Group();
 const armorMat = std(0x406080), skinMat = std(0xe0b090), leatherMat = std(0x5a3a22), metalMat = std(0x8890a0);
 const limb = (r1, r2, len, mat, parent) => { const m = new THREE.Mesh(new THREE.CylinderGeometry(r1, r2, len, 8), mat); m.position.y = -len / 2; parent.add(m); return m; };
@@ -120,15 +198,14 @@ const mkLeg = s => {
 };
 const LL = mkLeg(-1), LR = mkLeg(1);
 const armR = R.hand, armL = L.hand;
-player.traverse(o => o.castShadow = true);
 scene.add(player);
 
 function buildWeapon(w) {
   [armR, armL].forEach(a => { while (a.children.length) a.remove(a.children[0]); });
-  const m = std(WEAPONS[w].col); m.metalness = 0.6;
-  const blade = (len, wid) => { const g = new THREE.Group(); const hilt = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.06, 0.35), std(0x3a2a1a)); hilt.position.z = -0.05; g.add(hilt); const guard = new THREE.Mesh(new THREE.BoxGeometry(wid * 1.6 + 0.1, 0.08, 0.06), std(0x806030)); guard.position.z = 0.12; g.add(guard); const b = new THREE.Mesh(new THREE.BoxGeometry(wid, 0.08, len), m); b.position.z = len / 2 + 0.12; b.castShadow = true; g.add(b); g.traverse(o => o.castShadow = true); return g; };
+  const m = std(WEAPONS[w].col);
+  const blade = (len, wid) => { const g = new THREE.Group(); const hilt = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.06, 0.35), std(0x3a2a1a)); hilt.position.z = -0.05; g.add(hilt); const guard = new THREE.Mesh(new THREE.BoxGeometry(wid * 1.6 + 0.1, 0.08, 0.06), std(0x806030)); guard.position.z = 0.12; g.add(guard); const b = new THREE.Mesh(new THREE.BoxGeometry(wid, 0.08, len), m); b.position.z = len / 2 + 0.12; g.add(b); return g; };
   if (w === 'gs') armR.add(blade(3.2, 0.55));
-  if (w === 'ss') { armR.add(blade(1.5, 0.18)); const sh = new THREE.Mesh(new THREE.CylinderGeometry(0.6, 0.6, 0.1, 16), std(0x704020)); sh.rotation.z = Math.PI / 2; sh.position.set(-0.12, 0, 0.05); armL.add(sh); }
+  if (w === 'ss') { armR.add(blade(1.5, 0.18)); const sh = new THREE.Mesh(new THREE.CylinderGeometry(0.6, 0.6, 0.1, 12), std(0x704020)); sh.rotation.z = Math.PI / 2; sh.position.set(-0.12, 0, 0.05); armL.add(sh); }
   if (w === 'db') { armR.add(blade(1.1, 0.14)); armL.add(blade(1.1, 0.14)); }
 }
 
@@ -136,22 +213,23 @@ function buildWeapon(w) {
 let dragon = null;
 function patternTex(d) {
   const c = n => '#' + n.toString(16).padStart(6, '0');
-  return canvasTex(256, 256, (g, w, h) => {
+  // low-res nearest patterns for chunky pixel look
+  return canvasTex(32, 32, (g, w, h) => {
     g.fillStyle = c(d.body); g.fillRect(0, 0, w, h);
     g.fillStyle = c(d.accent); g.strokeStyle = c(d.accent);
-    if (d.pattern === 'stripes') for (let x = 0; x < w; x += 32) g.fillRect(x, 0, 14, h);
-    if (d.pattern === 'bands') for (let x = 0; x < w; x += 48) { g.fillRect(x, 0, 8, h); g.fillRect(x + 14, 0, 4, h); }
-    if (d.pattern === 'spots') for (let i = 0; i < 40; i++) { g.beginPath(); g.arc(Math.random() * w, Math.random() * h, 4 + Math.random() * 8, 0, 7); g.fill(); }
-    if (d.pattern === 'veins') { g.lineWidth = 3; for (let i = 0; i < 25; i++) { g.beginPath(); let x = Math.random() * w, y = Math.random() * h; g.moveTo(x, y); for (let k = 0; k < 5; k++) { x += (Math.random() - .5) * 50; y += (Math.random() - .5) * 50; g.lineTo(x, y); } g.stroke(); } }
+    if (d.pattern === 'stripes') for (let x = 0; x < w; x += 6) g.fillRect(x, 0, 3, h);
+    if (d.pattern === 'bands') for (let x = 0; x < w; x += 8) { g.fillRect(x, 0, 2, h); g.fillRect(x + 3, 0, 1, h); }
+    if (d.pattern === 'spots') for (let i = 0; i < 18; i++) g.fillRect((i * 5) % w, (i * 7) % h, 2 + (i % 2), 2 + (i % 2));
+    if (d.pattern === 'veins') { g.lineWidth = 1; for (let i = 0; i < 10; i++) { g.beginPath(); let x = (i * 3) % w, y = (i * 5) % h; g.moveTo(x, y); for (let k = 0; k < 3; k++) { x = (x + 4 + (k % 3)) % w; y = (y + 3) % h; g.lineTo(x, y); } g.stroke(); } }
   });
 }
 function buildDragon(def) {
   const root = new THREE.Group();
-  const skin = new THREE.MeshStandardMaterial({ map: patternTex(def), roughness: 0.6 });
+  const skin = new THREE.MeshLambertMaterial({ map: patternTex(def), flatShading: true });
   const belly = std(def.belly), horn = std(def.horns === 'crown' ? 0x401010 : 0xe8e0c8), dark = std(def.accent);
-  const mk = (geo, mat, x, y, z, parent = root) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); m.castShadow = true; parent.add(m); return m; };
-  const body = mk(new THREE.SphereGeometry(1, 20, 14), skin, 0, 3.2, 0); body.scale.set(2.0, 1.8, 3.4);
-  mk(new THREE.SphereGeometry(1, 16, 10), belly, 0, 2.5, 0.3).scale.set(1.6, 1.2, 2.8);
+  const mk = (geo, mat, x, y, z, parent = root) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); parent.add(m); return m; };
+  const body = mk(new THREE.SphereGeometry(1, 12, 8), skin, 0, 3.2, 0); body.scale.set(2.0, 1.8, 3.4);
+  mk(new THREE.SphereGeometry(1, 10, 8), belly, 0, 2.5, 0.3).scale.set(1.6, 1.2, 2.8);
   const neck = new THREE.Group(); neck.position.set(0, 4.0, 2.8); root.add(neck);
   mk(new THREE.CylinderGeometry(0.7, 1.1, 2.8, 12), skin, 0, 0.8, 1.0, neck).rotation.x = 1.0;
   const head = new THREE.Group(); head.position.set(0, 1.6, 2.4); neck.add(head);
@@ -171,7 +249,7 @@ function buildDragon(def) {
   [-1, 1].forEach(s => {
     const g = new THREE.Group(); g.position.set(1.4 * s, 4.4, 0.8); root.add(g);
     mk(new THREE.CylinderGeometry(0.15, 0.2, 4.5, 6), dark, 2.2 * s, 0.6, 0, g).rotation.z = -1.2 * s;
-    const mem = mk(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, 0, 0), new THREE.Vector3(4.3 * s, 1.5, 0), new THREE.Vector3(3.5 * s, -1.2, -3.5)]), new THREE.MeshStandardMaterial({ color: def.belly, side: THREE.DoubleSide, transparent: true, opacity: 0.9 }), 0, 0, 0, g);
+    const mem = mk(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, 0, 0), new THREE.Vector3(4.3 * s, 1.5, 0), new THREE.Vector3(3.5 * s, -1.2, -3.5)]), new THREE.MeshLambertMaterial({ color: def.belly, side: THREE.DoubleSide, transparent: true, opacity: 0.9, flatShading: true }), 0, 0, 0, g);
     mem.geometry.computeVertexNormals(); wings.push(g);
   });
   // tail: chain of segments in a group that can be severed at `tailCut`
@@ -206,7 +284,8 @@ const effects = [];
 
 function pStats() {
   const s = run.stats;
-  return { maxHp: 100 + s.hp * 20, atk: 1 + s.atk * 0.1, def: Math.pow(0.92, s.def), maxSt: 100 + s.sta * 20, spd: 7.5 * (1 + s.spd * 0.06) };
+  // ~1.8× former base speed so walk/run feel responsive on phone
+  return { maxHp: 100 + s.hp * 20, atk: 1 + s.atk * 0.1, def: Math.pow(0.92, s.def), maxSt: 100 + s.sta * 20, spd: 13.5 * (1 + s.spd * 0.06) };
 }
 
 function startFight() {
@@ -221,7 +300,7 @@ function startFight() {
   S = {
     def, ps, hp: ps.maxHp, st: ps.maxSt, potions: 3, cd: 0, swing: 0, charge: -1, block: false, dodgeT: 0, invuln: 0, drinkT: 0, hurtT: 0,
     dhp: def.hp, dmax: def.hp, tailHp: def.hp * 0.22, severed: false,
-    ai: { state: 'idle', t: 1.5, atk: null, dir: new THREE.Vector3(), hit: false }, over: false, introT: 2,
+    ai: { state: 'idle', t: 2.4 + (1 - def.aggro) * 1.2, atk: null, dir: new THREE.Vector3(), hit: false, lastAtk: '' }, over: false, introT: 2.2,
   };
   $('dname').textContent = `第${run.fight + 1}戰：${def.name}`;
   $('pname').textContent = `獵人（${WEAPONS[run.weapon].name}）`;
@@ -464,11 +543,37 @@ function spawnBreath(origin, dir, col) {
 
 // ---------- dragon AI ----------
 const ATTACKS = {
-  bite:   { name: '咬！', wind: 0.8, act: 0.35, rec: 0.9, range: 9 },
-  tail:   { name: '甩尾！', wind: 0.9, act: 0.7, rec: 1.0, range: 10 },
-  charge: { name: '衝撞！', wind: 1.1, act: 1.4, rec: 1.3, range: 40 },
-  breath: { name: '吐息！', wind: 1.2, act: 1.2, rec: 1.2, range: 22 },
+  bite:   { name: '咬！', wind: 1.35, act: 0.4, rec: 1.15, range: 9 },
+  tail:   { name: '甩尾！', wind: 1.5, act: 0.75, rec: 1.25, range: 10 },
+  charge: { name: '衝撞！', wind: 1.7, act: 1.35, rec: 1.55, range: 40 },
+  breath: { name: '吐息！', wind: 1.85, act: 1.15, rec: 1.45, range: 22 },
 };
+function idleCooldown(def) {
+  // 1.5–3s+ between attacks; early dragons linger, late ones press harder
+  const lo = 1.5 + (1 - def.aggro) * 1.2;
+  const hi = 2.2 + (1 - def.aggro) * 1.4;
+  return lo + Math.random() * (hi - lo);
+}
+function pickAttack(def, dist, behind, lastAtk) {
+  // Distance-driven, low randomness; avoid repeating the same move
+  let pick;
+  if (behind && dist < 12) pick = 'tail';
+  else if (dist < 7.5) pick = def.aggro < 0.55 ? 'bite' : (Math.random() < 0.7 ? 'bite' : 'tail');
+  else if (dist < 14) {
+    if (def.aggro < 0.45) pick = 'bite';
+    else if (def.aggro < 0.7) pick = Math.random() < 0.65 ? 'breath' : 'bite';
+    else pick = Math.random() < 0.55 ? 'breath' : (Math.random() < 0.5 ? 'charge' : 'bite');
+  } else if (dist < 22) {
+    pick = def.aggro < 0.5 ? (Math.random() < 0.7 ? 'breath' : 'charge') : (Math.random() < 0.45 ? 'breath' : 'charge');
+  } else pick = 'charge';
+  if (pick === lastAtk) {
+    if (pick === 'bite') pick = dist < 10 ? 'tail' : 'breath';
+    else if (pick === 'breath') pick = dist > 12 ? 'charge' : 'bite';
+    else if (pick === 'charge') pick = 'breath';
+    else pick = 'bite';
+  }
+  return pick;
+}
 function updateDragon(dt, t) {
   const ai = S.ai, d = dragon.root, def = S.def;
   const toP = tmp.copy(player.position).sub(d.position).setY(0);
@@ -483,27 +588,25 @@ function updateDragon(dt, t) {
   if (ai.state === 'dead') { d.rotation.z = Math.min(d.rotation.z + dt, Math.PI / 2 * 0.9); d.position.y = Math.max(d.position.y - dt, -1); return; }
   if (S.over) return;
   if (ai.state === 'idle') {
-    const diff = turn(wantYaw, 2.0 * def.speed);
-    if (dist > 8) { d.position.addScaledVector(fwd, 5 * def.speed * dt); walk = 1; }
+    const diff = turn(wantYaw, 1.6 * def.speed);
+    const chase = 3.2 + def.aggro * 2.2;
+    if (dist > 9) { d.position.addScaledVector(fwd, chase * def.speed * dt); walk = 1; }
+    else if (dist < 5 && def.aggro > 0.6) { d.position.addScaledVector(fwd, -1.5 * dt); walk = 1; }
     if (ai.t <= 0) {
-      let pick;
-      const r = Math.random();
-      const behind = Math.abs(diff) > 1.6;
-      if (behind && dist < 11) pick = 'tail';
-      else if (dist < 8) pick = r < 0.5 ? 'bite' : r < 0.8 ? 'tail' : 'breath';
-      else if (dist < 20) pick = r < 0.5 ? 'breath' : 'charge';
-      else pick = 'charge';
-      ai.atk = pick; ai.state = 'wind'; ai.t = ATTACKS[pick].wind / Math.sqrt(def.speed); ai.hit = false;
+      const pick = pickAttack(def, dist, Math.abs(diff) > 1.55, ai.lastAtk);
+      ai.atk = pick; ai.lastAtk = pick; ai.state = 'wind';
+      ai.t = ATTACKS[pick].wind * (def.windMul || 1); ai.hit = false;
       snd(90, 0.4, 'sawtooth', 0.12, 40);
     }
   } else if (ai.state === 'wind') {
     const A = ATTACKS[ai.atk];
     $('tele').textContent = '⚠ ' + A.name;
-    if (ai.atk !== 'tail') turn(wantYaw, 3);
-    if (ai.atk === 'bite') dragon.neck.rotation.x = -0.4;
-    if (ai.atk === 'tail') { d.rotation.y -= dt * 0.6; dragon.tailBase.rotation.y = 0.8; }
-    if (ai.atk === 'charge') { d.position.y = Math.abs(Math.sin(t * 20)) * 0.15; }
-    if (ai.atk === 'breath') { dragon.neck.rotation.x = -0.6; dragon.jaw.rotation.x = 0.3; }
+    // Lock facing during most of telegraph; slight track only early in wind
+    if (ai.atk !== 'tail' && ai.t > A.wind * (def.windMul || 1) * 0.35) turn(wantYaw, 1.8);
+    if (ai.atk === 'bite') dragon.neck.rotation.x = -0.45;
+    if (ai.atk === 'tail') { d.rotation.y -= dt * 0.35; dragon.tailBase.rotation.y = 0.9; }
+    if (ai.atk === 'charge') { d.position.y = Math.abs(Math.sin(t * 12)) * 0.12; }
+    if (ai.atk === 'breath') { dragon.neck.rotation.x = -0.65; dragon.jaw.rotation.x = 0.35; }
     if (ai.t <= 0) { ai.state = 'act'; ai.t = A.act; ai.dir.copy(fwd); if (ai.atk === 'tail') ai.spin = 0; snd(ai.atk === 'breath' ? 160 : 70, 0.5, 'sawtooth', 0.2, -40); }
   } else if (ai.state === 'act') {
     const A = ATTACKS[ai.atk];
@@ -520,20 +623,20 @@ function updateDragon(dt, t) {
         if (flatDist(tipP, player.position) < 3.0 || flatDist(worldPos(dragon.tailSegs[1]), player.position) < 2.5) { ai.hit = true; hurtPlayer(30, d.position); }
       }
     } else if (ai.atk === 'charge') {
-      d.position.addScaledVector(ai.dir, 22 * def.speed * dt); walk = 2;
+      d.position.addScaledVector(ai.dir, 20 * def.speed * dt); walk = 2;
       if (!ai.hit && dist < 4.0) { ai.hit = true; hurtPlayer(35, d.position); }
     } else if (ai.atk === 'breath') {
       dragon.neck.rotation.x = -0.1; dragon.jaw.rotation.x = 0.6;
       const mouth = worldPos(dragon.head).addScaledVector(fwd, 2);
-      if (Math.random() < 0.7) spawnBreath(mouth, ai.dir.clone().setY(-0.15).normalize(), BREATH_COL[def.breath]);
+      if (Math.random() < 0.55) spawnBreath(mouth, ai.dir.clone().setY(-0.15).normalize(), BREATH_COL[def.breath]);
       const rel = tmp2.copy(player.position).sub(d.position).setY(0);
       const ang = rel.angleTo(ai.dir);
-      if (!ai.hit && ang < 0.4 && rel.length() < A.range) { ai.hit = true; hurtPlayer(30, d.position); }
+      if (!ai.hit && ang < 0.35 && rel.length() < A.range) { ai.hit = true; hurtPlayer(30, d.position); }
     }
-    if (ai.t <= 0) { ai.state = 'rec'; ai.t = A.rec; d.position.y = 0; }
+    if (ai.t <= 0) { ai.state = 'rec'; ai.t = A.rec * (1.05 + (1 - def.aggro) * 0.25); d.position.y = 0; }
   } else if (ai.state === 'rec') {
-    if (ai.atk === 'charge') d.position.addScaledVector(ai.dir, Math.max(0, ai.t) * 8 * dt);
-    if (ai.t <= 0) { ai.state = 'idle'; ai.t = 0.6 + Math.random() * 1.4 / def.speed; }
+    if (ai.atk === 'charge') d.position.addScaledVector(ai.dir, Math.max(0, ai.t) * 6 * dt);
+    if (ai.t <= 0) { ai.state = 'idle'; ai.t = idleCooldown(def); }
   }
   // keep in arena
   const r = Math.hypot(d.position.x, d.position.z);
@@ -598,7 +701,7 @@ function updatePlayer(dt) {
   pBody.material.emissive.setHex(S.invuln > 0 && S.hurtT > 0 ? 0x660000 : S.drinkT > 0 ? 0x004400 : 0);
 }
 
-const ROLL_T = 0.5, ROLL_DIST = 6.5;
+const ROLL_T = 0.5, ROLL_DIST = 11.5; // ~1.8× prior distance to match faster walk
 const lerp = THREE.MathUtils.lerp;
 let walkPh = 0;
 function animatePlayer(dt) {
@@ -700,9 +803,19 @@ function frame() {
   camera.lookAt(target.x, target.y + 2.5, target.z);
   if (msgT > 0) { msgT -= dt; if (msgT <= 0) $('msg').textContent = ''; }
   hud();
-  renderer.render(scene, camera);
+  // pixel-art: render scene to low-res RT, nearest-neighbor blit to screen
+  if (hasWebGL && pixelRT) {
+    renderer.setRenderTarget(pixelRT);
+    renderer.clear();
+    renderer.render(scene, camera);
+    renderer.setRenderTarget(null);
+    renderer.clear();
+    renderer.render(blitScene, blitCam);
+  } else {
+    renderer.render(scene, camera);
+  }
 }
 // title backdrop dragon
 dragon = buildDragon(DRAGONS[0]); dragon.root.position.set(0, 0, 10);
 frame();
-window.__hunt = { run, get S() { return S; }, startFight, severTail, pad, pollGamepad, refreshPadPresence, input, keys };
+window.__hunt = { run, get S() { return S; }, startFight, severTail, pad, pollGamepad, refreshPadPresence, input, keys, PIXEL_SCALE, pStats, ATTACKS, idleCooldown, pickAttack };
