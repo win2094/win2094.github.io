@@ -11,17 +11,22 @@ canvas{display:block}
 #hud{position:fixed;inset:0;pointer-events:none;font-size:32px}
 .bar{height:30px;background:#0008;border:3px solid #fff8;border-radius:10px;overflow:hidden}
 .bar>div{height:100%;transition:width .15s}
-#ptop{position:absolute;left:16px;top:12px;width:min(46vw,520px)}
-#dtop{position:absolute;right:16px;top:12px;width:min(46vw,520px);text-align:right}
+#ptop{position:absolute;left:16px;top:12px;width:min(39vw,520px)}
+#dtop{position:absolute;right:16px;top:12px;width:min(39vw,520px);text-align:right}
 .lbl{font-size:32px;font-weight:700;text-shadow:0 2px 4px #000;margin:4px 0}
-#btns{position:absolute;right:12px;top:150px;display:flex;flex-direction:column;gap:10px;pointer-events:auto}
+#btns{position:absolute;left:50%;transform:translateX(-50%);top:8px;display:flex;flex-direction:column;gap:8px;pointer-events:auto}
 .sb{font-size:32px;padding:6px 14px;border-radius:12px;border:2px solid #fff8;background:#000a;color:#fff}
 #msg{position:absolute;left:50%;top:30%;transform:translate(-50%,-50%);font-size:52px;font-weight:800;text-shadow:0 3px 8px #000;text-align:center;white-space:nowrap}
 #tele{position:absolute;left:50%;top:44%;transform:translateX(-50%);font-size:40px;color:#ffcf40;font-weight:800;text-shadow:0 2px 6px #000}
 #touch{position:absolute;inset:0;pointer-events:none}
 #stick{position:absolute;left:30px;bottom:30px;width:220px;height:220px;border-radius:50%;background:#fff2;border:3px solid #fff5;pointer-events:auto}
 #knob{position:absolute;left:70px;top:70px;width:80px;height:80px;border-radius:50%;background:#fff6}
-#acts{position:absolute;right:20px;bottom:20px;display:grid;grid-template-columns:repeat(3,110px);gap:12px;pointer-events:auto}
+#acts{position:absolute;inset:0;pointer-events:none}
+#acts .ab{position:absolute;pointer-events:auto}
+#atk{right:20px;bottom:20px;width:150px;height:150px!important;background:#7a1a1a!important;font-size:40px!important}
+#roll{right:190px;bottom:16px;width:150px;height:150px!important;border:4px solid #8cf!important;background:#1a4a7acc!important;font-size:36px!important;font-weight:800}
+#spc{right:30px;bottom:190px;width:110px}
+#pot2{right:160px;bottom:190px;width:100px;height:100px!important}
 .ab{height:110px;border-radius:50%;border:3px solid #fff8;background:#0009;color:#fff;font-size:32px;font-weight:700}
 .panel{position:fixed;inset:0;background:#000c;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;font-size:36px;text-align:center;padding:20px;overflow:auto}
 .panel h1{font-size:60px;margin:0}
@@ -30,6 +35,8 @@ canvas{display:block}
 .row button{min-width:80px;padding:6px 18px}
 .hidden{display:none!important}
 #keys{font-size:24px;opacity:.8}
+@media (max-height:500px){#pot2{right:355px;bottom:20px}#spc{right:355px;bottom:135px}}
+@media (orientation:portrait){#ptop,#dtop{width:44vw}#btns{top:auto;bottom:422px;flex-direction:row;left:auto;right:12px;transform:none}#stick{bottom:190px;left:20px}#roll{right:auto;left:20px}#spc{bottom:190px}#pot2{right:20px;bottom:310px}}
 </style>
 <script type="importmap">{"imports":{"three":"https://unpkg.com/three@0.160.0/build/three.module.js"}}</script>
 </head>
@@ -40,13 +47,13 @@ canvas{display:block}
   <div id="btns"><button class="sb" id="mute">🔊 聲</button><button class="sb" id="restart">↻ 重新</button></div>
   <div id="tele"></div><div id="msg"></div>
   <div id="touch" class="hidden"><div id="stick"><div id="knob"></div></div>
-    <div id="acts"><button class="ab" data-a="potion">藥</button><button class="ab" data-a="special">技</button><button class="ab" data-a="dodge">閃</button><span></span><span></span><button class="ab" data-a="attack" style="background:#7a1a1a">斬</button></div></div>
+    <div id="acts"><button class="ab" id="pot2" data-a="potion">藥</button><button class="ab" id="spc" data-a="special">技</button><button class="ab" id="roll" data-a="dodge">翻滾</button><button class="ab" id="atk" data-a="attack">斬</button></div></div>
 </div>
 <div class="panel" id="title"><h1>鬥技場狩龍</h1><div>揀武器：</div>
   <button data-w="gs">大劍（慢、重、可蓄力）</button>
   <button data-w="ss">單手劍（快、可格擋）</button>
   <button data-w="db">雙刀（極快連擊）</button>
-  <div id="keys">電腦：WASD 移動、滑鼠左鍵/J 攻擊、右鍵/K 技（蓄力/格擋/亂舞）、空白鍵 閃避、Q 飲藥、拖滑鼠轉視角</div></div>
+  <div id="keys">電腦：WASD 移動、滑鼠左鍵/J 攻擊、右鍵/K 技（蓄力/格擋/亂舞）、空白鍵/Shift 翻滾（無敵、耗耐力）、Q 飲藥、拖滑鼠轉視角</div></div>
 <div class="panel hidden" id="stats"><h1 id="stitle">勝利！</h1><div id="spts"></div><div id="slist"></div><button id="snext">下一戰</button></div>
 <div class="panel hidden" id="over"><h1 id="otitle">狩獵失敗</h1><div id="otext"></div><button id="oagain">再嚟</button></div>
 <script type="module" src="game.js"></script>

@@ -76,21 +76,45 @@ $('mute').onclick = () => { muted = !muted; $('mute').textContent = muted ? '�
 // ---------- player ----------
 const std = c => new THREE.MeshStandardMaterial({ color: c, roughness: 0.7 });
 const player = new THREE.Group();
-const pBody = new THREE.Mesh(new THREE.CapsuleGeometry(0.45, 1.0, 4, 8), std(0x406080)); pBody.position.y = 1.0;
-const pHead = new THREE.Mesh(new THREE.SphereGeometry(0.32, 12, 10), std(0xe0b090)); pHead.position.y = 2.0;
-const pHelm = new THREE.Mesh(new THREE.ConeGeometry(0.36, 0.4, 10), std(0x808890)); pHelm.position.y = 2.3;
-player.add(pBody, pHead, pHelm);
-const armR = new THREE.Group(); armR.position.set(0.55, 1.5, 0); player.add(armR);
-const armL = new THREE.Group(); armL.position.set(-0.55, 1.5, 0); player.add(armL);
+const armorMat = std(0x406080), skinMat = std(0xe0b090), leatherMat = std(0x5a3a22), metalMat = std(0x8890a0);
+const limb = (r1, r2, len, mat, parent) => { const m = new THREE.Mesh(new THREE.CylinderGeometry(r1, r2, len, 8), mat); m.position.y = -len / 2; parent.add(m); return m; };
+const joint = (parent, x, y, z) => { const g = new THREE.Group(); g.position.set(x, y, z); parent.add(g); return g; };
+const rig = joint(player, 0, 1.0, 0);           // pivot at hips, used for the roll
+const hips = joint(rig, 0, 0, 0);
+const pelvis = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.3, 0.32), leatherMat); hips.add(pelvis);
+const torso = joint(hips, 0, 0.12, 0);
+const pBody = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.7, 0.36), armorMat); pBody.position.y = 0.38; torso.add(pBody);
+const chestPlate = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.4, 0.08), metalMat); chestPlate.position.set(0, 0.5, 0.2); torso.add(chestPlate);
+const neckJ = joint(torso, 0, 0.78, 0);
+const pHead = new THREE.Mesh(new THREE.SphereGeometry(0.22, 12, 10), skinMat); pHead.position.y = 0.2; neckJ.add(pHead);
+const pHelm = new THREE.Mesh(new THREE.SphereGeometry(0.25, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2), metalMat); pHelm.position.y = 0.24; neckJ.add(pHelm);
+const crest = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.18, 0.4), std(0xa02020)); crest.position.set(0, 0.5, -0.02); neckJ.add(crest);
+const mkArm = s => {
+  const sh = joint(torso, 0.4 * s, 0.68, 0);
+  sh.add(new THREE.Mesh(new THREE.SphereGeometry(0.16, 8, 6), metalMat));
+  limb(0.1, 0.09, 0.36, armorMat, sh);
+  const el = joint(sh, 0, -0.36, 0); limb(0.085, 0.07, 0.32, skinMat, el);
+  const hand = joint(el, 0, -0.34, 0); hand.add(new THREE.Mesh(new THREE.SphereGeometry(0.08, 8, 6), leatherMat));
+  return { sh, el, hand };
+};
+const R = mkArm(1), L = mkArm(-1);
+const mkLeg = s => {
+  const hip = joint(hips, 0.16 * s, -0.1, 0); limb(0.12, 0.1, 0.45, leatherMat, hip);
+  const kn = joint(hip, 0, -0.45, 0); limb(0.1, 0.08, 0.42, armorMat, kn);
+  const foot = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.1, 0.3), leatherMat); foot.position.set(0, -0.44, 0.06); kn.add(foot);
+  return { hip, kn };
+};
+const LL = mkLeg(-1), LR = mkLeg(1);
+const armR = R.hand, armL = L.hand;
 player.traverse(o => o.castShadow = true);
 scene.add(player);
 
 function buildWeapon(w) {
   [armR, armL].forEach(a => { while (a.children.length) a.remove(a.children[0]); });
   const m = std(WEAPONS[w].col); m.metalness = 0.6;
-  const blade = (len, wid) => { const b = new THREE.Mesh(new THREE.BoxGeometry(wid, 0.08, len), m); b.position.z = len / 2 + 0.2; b.castShadow = true; return b; };
+  const blade = (len, wid) => { const g = new THREE.Group(); const hilt = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.06, 0.35), std(0x3a2a1a)); hilt.position.z = -0.05; g.add(hilt); const guard = new THREE.Mesh(new THREE.BoxGeometry(wid * 1.6 + 0.1, 0.08, 0.06), std(0x806030)); guard.position.z = 0.12; g.add(guard); const b = new THREE.Mesh(new THREE.BoxGeometry(wid, 0.08, len), m); b.position.z = len / 2 + 0.12; b.castShadow = true; g.add(b); g.traverse(o => o.castShadow = true); return g; };
   if (w === 'gs') armR.add(blade(3.2, 0.55));
-  if (w === 'ss') { armR.add(blade(1.5, 0.18)); const sh = new THREE.Mesh(new THREE.CylinderGeometry(0.6, 0.6, 0.1, 16), std(0x704020)); sh.rotation.z = Math.PI / 2; sh.position.set(-0.1, 0, 0.3); armL.add(sh); }
+  if (w === 'ss') { armR.add(blade(1.5, 0.18)); const sh = new THREE.Mesh(new THREE.CylinderGeometry(0.6, 0.6, 0.1, 16), std(0x704020)); sh.rotation.z = Math.PI / 2; sh.position.set(-0.12, 0, 0.05); armL.add(sh); }
   if (w === 'db') { armR.add(blade(1.1, 0.14)); armL.add(blade(1.1, 0.14)); }
 }
 
@@ -199,7 +223,7 @@ addEventListener('keydown', e => {
   keys[e.code] = true;
   if (e.code === 'KeyJ') input.attack = true;
   if (e.code === 'KeyK') input.special = true;
-  if (e.code === 'Space') input.dodge = true;
+  if (e.code === 'Space' || e.code === 'ShiftLeft' || e.code === 'ShiftRight') { input.dodge = true; e.preventDefault(); }
   if (e.code === 'KeyQ') input.potion = true;
 });
 addEventListener('keyup', e => { keys[e.code] = false; if (e.code === 'KeyJ') input.attack = false; if (e.code === 'KeyK') input.special = false; });
@@ -431,16 +455,17 @@ function updatePlayer(dt) {
   let speed = S.ps.spd * w.speedMul;
   if (S.charge >= 0 || S.block) speed *= 0.35;
   if (S.drinkT > 0) speed *= 0.3;
-  if (S.dodgeT > 0) { player.position.addScaledVector(S.dodgeDir, 16 * dt); }
+  if (S.dodgeT > 0) { player.position.addScaledVector(S.dodgeDir, ROLL_DIST / ROLL_T * dt); }
   else if (dir.lengthSq() > 0.01 && S.hurtT <= 0) {
-    player.position.addScaledVector(dir, speed * dt);
+    player.position.addScaledVector(dir, speed * dt); S.moveAmt = Math.min(1, dir.length()) * speed;
     if (S.swing <= 0) player.rotation.y = Math.atan2(dir.x, dir.z);
   }
   // dodge
   if (input.dodge) {
     input.dodge = false;
-    if (S.st >= 25 && S.dodgeT <= 0) { S.st -= 25; S.dodgeT = 0.3; S.invuln = 0.4; S.dodgeDir = dir.lengthSq() > 0.01 ? dir.clone().normalize() : new THREE.Vector3(-Math.sin(player.rotation.y), 0, -Math.cos(player.rotation.y)); snd(500, 0.08, 'triangle', 0.06); S.charge = -1; }
+    if (S.st >= 25 && S.dodgeT <= 0 && S.hurtT <= 0) { S.st -= 25; S.dodgeT = ROLL_T; S.invuln = 0.38; S.dodgeDir = dir.lengthSq() > 0.01 ? dir.clone().normalize() : new THREE.Vector3(Math.sin(player.rotation.y), 0, Math.cos(player.rotation.y)); player.rotation.y = Math.atan2(S.dodgeDir.x, S.dodgeDir.z); snd(500, 0.08, 'triangle', 0.06); S.charge = -1; S.swing = 0; S.drinkT = 0; }
   }
+  if (S.dodgeT > 0 || dir.lengthSq() <= 0.01 || S.hurtT > 0) S.moveAmt = 0;
   // potion
   if (input.potion) { input.potion = false; if (S.potions > 0 && S.drinkT <= 0 && S.hp < S.ps.maxHp) { S.potions--; S.drinkT = 1.0; snd(700, 0.3, 'sine', 0.1, 300); } }
   if (S.drinkT > 0) { S.drinkT -= dt; S.hp = Math.min(S.ps.maxHp, S.hp + S.ps.maxHp * 0.4 * dt); }
@@ -449,26 +474,89 @@ function updatePlayer(dt) {
   S.block = false;
   if (run.weapon === 'gs') {
     if (input.special && S.cd <= 0) { if (S.charge < 0) { S.charge = 0; faceDragon(); } S.charge = Math.min(1.6, S.charge + dt); if (S.charge >= 1.6 && Math.random() < 0.1) snd(1000, 0.03); }
-    else if (S.charge >= 0) { const c = S.charge; S.charge = -1; S.cd = w.cd * 1.3; S.swing = 0.5; doHit(1 + c * 1.6, c > 1.2 ? '蓄力斬！' : null); }
+    else if (S.charge >= 0) { const c = S.charge; S.charge = -1; S.cd = w.cd * 1.3; S.swing = S.swingDur = 0.55; S.combo = (S.combo || 0) + 1; doHit(1 + c * 1.6, c > 1.2 ? '蓄力斬！' : null); }
   } else if (run.weapon === 'ss') {
     if (input.special && S.st > 0) { S.block = true; S.st -= 8 * dt; }
   } else if (run.weapon === 'db') {
-    if (input.special && S.st > 5 && S.cd <= 0) { faceDragon(); S.st -= 6; S.cd = 0.1; S.swing = 0.15; doHit(0.9, null); }
+    if (input.special && S.st > 5 && S.cd <= 0) { faceDragon(); S.st -= 6; S.cd = 0.1; S.swing = S.swingDur = 0.3; S.combo = (S.combo || 0) + 1; doHit(0.9, null); }
   }
-  if (input.attack && S.cd <= 0 && S.drinkT <= 0 && S.charge < 0 && !S.block) {
-    faceDragon(); S.cd = w.cd; S.swing = Math.min(0.5, w.cd * 0.8); doHit(1);
+  if (input.attack && S.dodgeT <= 0 && S.cd <= 0 && S.drinkT <= 0 && S.charge < 0 && !S.block) {
+    faceDragon(); S.cd = w.cd; S.swing = S.swingDur = run.weapon === 'gs' ? 0.7 : run.weapon === 'ss' ? 0.32 : 0.34; S.combo = (S.combo || 0) + 1; doHit(1);
     if (run.weapon === 'gs') input.attack = false;
   }
   if (!input.special && !S.block && S.dodgeT <= 0 && S.charge < 0) S.st = Math.min(S.ps.maxSt, S.st + 28 * dt);
   const r = Math.hypot(player.position.x, player.position.z);
   if (r > ARENA) { player.position.x *= ARENA / r; player.position.z *= ARENA / r; }
-  // arm animation
-  const sw = S.swing > 0 ? S.swing / Math.max(0.15, w.cd * 0.8) : 0;
-  armR.rotation.x = S.charge >= 0 ? -2.4 : -0.3 - Math.sin(sw * Math.PI) * 1.6 + (sw ? 1.0 : 0);
-  armL.rotation.x = run.weapon === 'db' ? -0.3 - Math.sin(sw * Math.PI + 1) * 1.4 : (S.block ? -1.5 : -0.2);
-  if (run.weapon === 'gs') armR.rotation.y = sw ? 0.8 - sw * 1.6 : 0.3;
-  pBody.rotation.x = S.dodgeT > 0 ? 0.8 : 0;
+  animatePlayer(dt);
   pBody.material.emissive.setHex(S.invuln > 0 && S.hurtT > 0 ? 0x660000 : S.drinkT > 0 ? 0x004400 : 0);
+}
+
+const ROLL_T = 0.5, ROLL_DIST = 6.5;
+const lerp = THREE.MathUtils.lerp;
+let walkPh = 0;
+function animatePlayer(dt) {
+  const wpn = run.weapon, move = S.moveAmt || 0;
+  walkPh += dt * (4 + move * 1.3);
+  const stride = Math.min(1, move / 6);
+  const sw = Math.sin(walkPh);
+  // base pose: walk/run cycle
+  const pose = {
+    hipL: sw * 0.9 * stride, hipR: -sw * 0.9 * stride,
+    knL: Math.max(0, -Math.cos(walkPh)) * 1.2 * stride + 0.05, knR: Math.max(0, Math.cos(walkPh)) * 1.2 * stride + 0.05,
+    shR: [-sw * 0.6 * stride - 0.2, 0, 0.15], shL: [sw * 0.6 * stride - 0.2, 0, -0.15],
+    elR: -0.4, elL: -0.4, handR: [0, 0, 0], handL: [0, 0, 0],
+    torso: [0.15 * stride, 0, 0], bob: Math.abs(Math.cos(walkPh)) * 0.08 * stride, rigX: 0,
+  };
+  if (wpn === 'gs') { pose.shR = [-0.5, 0.2, -0.5]; pose.shL = [-0.6, -0.3, 0.6]; pose.elR = -1.2; pose.elL = -1.3; pose.handR = [0.4, 0, 0]; }
+  if (S.block) { pose.shL = [-1.5, 0, 0.3]; pose.elL = -1.4; pose.handL = [0, -1.3, 0]; pose.torso = [0.1, 0.25, 0]; pose.hipL = -0.4; pose.knL = 0.5; pose.hipR = 0.3; pose.knR = 0.3; }
+  if (S.charge >= 0) { // great sword charge: blade overhead, wobbling as it fills
+    const q = Math.min(1, S.charge / 1.6), shake = q > 0.95 ? Math.sin(performance.now() / 25) * 0.05 : 0;
+    pose.shR = [-2.9 - q * 0.2 + shake, 0, -0.35]; pose.shL = [-2.9 - q * 0.2 + shake, 0, 0.35]; pose.elR = pose.elL = -0.3; pose.handR = [1.2, 0, 0];
+    pose.torso = [-0.25 * q, 0, 0]; pose.hipL = -0.5; pose.knL = 0.6; pose.hipR = 0.4; pose.knR = 0.2;
+  }
+  if (S.swing > 0) {
+    const p = 1 - S.swing / S.swingDur; // 0→1 through the swing
+    const ease = p < 0.35 ? p / 0.35 : 1;
+    const combo = S.combo || 0;
+    if (wpn === 'gs') { // heavy overhead: wind-up then crash down into a crouch
+      const wind = Math.min(1, p / 0.25), down = THREE.MathUtils.smoothstep(p, 0.2, 0.45);
+      const a = lerp(lerp(-0.5, -3.0, wind), 0.2, down);
+      pose.shR = [a, 0, -0.35]; pose.shL = [a, 0, 0.35]; pose.elR = pose.elL = -0.25; pose.handR = [lerp(1.2, 0.5, down), 0, 0];
+      pose.torso = [lerp(-0.3, 0.6, down), 0, 0]; pose.hipL = -0.7 * down; pose.knL = 1.0 * down; pose.hipR = 0.5 * down; pose.knR = 0.4 * down; pose.bob = -0.25 * down;
+    } else if (wpn === 'ss') { // alternating quick slashes: forehand / backhand / downward
+      const k = combo % 3, e = ease;
+      if (k === 0) { pose.shR = [-1.4, 0, lerp(1.6, -0.3, e)]; pose.torso = [0.1, lerp(0.5, -0.5, e), 0]; }
+      else if (k === 1) { pose.shR = [-1.4, 0, lerp(-0.4, 1.4, e)]; pose.torso = [0.1, lerp(-0.4, 0.5, e), 0]; }
+      else { pose.shR = [lerp(-2.8, -0.3, e), 0, 0.2]; pose.torso = [lerp(-0.1, 0.35, e), 0, 0]; }
+      pose.elR = -0.2; pose.handR = [0, 0, 0]; pose.hipL = -0.5; pose.knL = 0.5; pose.hipR = 0.3;
+      if (!S.block) { pose.shL = [-0.9, 0, 0.3]; pose.elL = -1.0; }
+    } else { // dual blades: arms flung out, whole body spins
+      const dirn = combo % 2 ? 1 : -1;
+      pose.shR = [-1.2, 0, 1.4 - Math.sin(p * Math.PI) * 0.4]; pose.shL = [-1.2, 0, -1.4 + Math.sin(p * Math.PI) * 0.4];
+      pose.elR = pose.elL = -0.15; pose.handR = [0.3, 0, 0]; pose.handL = [0.3, 0, 0];
+      pose.torso = [0.2, dirn * p * Math.PI * 2, combo % 3 === 2 ? 0.3 : 0]; pose.hipL = -0.3; pose.knL = 0.4; pose.hipR = 0.3; pose.knR = 0.4;
+    }
+  }
+  if (S.drinkT > 0) { pose.shR = [-2.2, 0, -0.6]; pose.elR = -1.9; pose.torso = [-0.3, 0, 0]; }
+  if (S.hurtT > 0) { pose.torso = [-0.5, 0, 0]; pose.shR[0] -= 0.6; pose.shL[0] -= 0.6; }
+  if (S.dodgeT > 0) { // forward roll: tuck and spin the whole rig around the hips
+    const p = 1 - S.dodgeT / ROLL_T;
+    pose.rigX = p * Math.PI * 2; pose.bob = -Math.sin(p * Math.PI) * 0.45;
+    pose.hipL = pose.hipR = -1.9; pose.knL = pose.knR = 2.2; pose.torso = [0.7, 0, 0];
+    pose.shR = [-1.0, 0, 0.3]; pose.shL = [-1.0, 0, -0.3]; pose.elR = pose.elL = -1.6;
+  }
+  const k = 1 - Math.exp(-dt * 22), sk = (o, v) => { o.x = lerp(o.x, v[0], k); o.y = lerp(o.y, v[1], k); o.z = lerp(o.z, v[2], k); };
+  LL.hip.rotation.x = lerp(LL.hip.rotation.x, pose.hipL, k); LR.hip.rotation.x = lerp(LR.hip.rotation.x, pose.hipR, k);
+  LL.kn.rotation.x = lerp(LL.kn.rotation.x, pose.knL, k); LR.kn.rotation.x = lerp(LR.kn.rotation.x, pose.knR, k);
+  sk(R.sh.rotation, pose.shR); sk(L.sh.rotation, pose.shL);
+  R.el.rotation.x = lerp(R.el.rotation.x, pose.elR, k); L.el.rotation.x = lerp(L.el.rotation.x, pose.elL, k);
+  sk(R.hand.rotation, pose.handR); sk(L.hand.rotation, pose.handL);
+  // spin and roll are set directly so they don't lag behind the motion
+  const spinning = wpn === 'db' && S.swing > 0;
+  torso.rotation.x = lerp(torso.rotation.x, pose.torso[0], k); torso.rotation.z = lerp(torso.rotation.z, pose.torso[2], k);
+  torso.rotation.y = spinning ? pose.torso[1] : lerp(torso.rotation.y, pose.torso[1], k);
+  rig.rotation.x = pose.rigX;
+  rig.position.y = 1.0 + (S.dodgeT > 0 ? pose.bob : lerp(rig.position.y - 1.0, pose.bob, k));
 }
 
 // ---------- loop ----------
@@ -499,7 +587,7 @@ function frame() {
   // camera
   const target = S ? player.position : new THREE.Vector3(0, 0, 10);
   if (!S) camYaw += dt * 0.15;
-  const dist = 13;
+  const dist = 11;
   camera.position.set(target.x - Math.sin(camYaw) * dist * Math.cos(camPitch), 2 + Math.sin(camPitch) * dist, target.z - Math.cos(camYaw) * dist * Math.cos(camPitch));
   camera.lookAt(target.x, target.y + 2.5, target.z);
   if (msgT > 0) { msgT -= dt; if (msgT <= 0) $('msg').textContent = ''; }
