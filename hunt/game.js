@@ -23,9 +23,23 @@ const run = { weapon: 'gs', fight: 0, pts: 0, stats: { hp: 0, atk: 0, def: 0, st
 const STAT_NAMES = { hp: '體力', atk: '攻擊', def: '防禦', sta: '耐力', spd: '速度' };
 
 // ---------- three setup ----------
-const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
-renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
-renderer.shadowMap.enabled = true;
+let renderer;
+try {
+  renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+} catch (e) {
+  // Headless / no-GPU fallback so input (gamepad) can still be exercised
+  const canvas = document.createElement('canvas');
+  renderer = {
+    domElement: canvas,
+    shadowMap: { enabled: false },
+    setPixelRatio() {},
+    setSize(w, h) { canvas.width = w; canvas.height = h; },
+    render() {},
+  };
+  console.warn('WebGL unavailable; using canvas stub', e);
+}
+renderer.setPixelRatio?.(Math.min(devicePixelRatio, 2));
+if (renderer.shadowMap) renderer.shadowMap.enabled = true;
 document.body.prepend(renderer.domElement);
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x87a8c8);
@@ -219,6 +233,8 @@ let msgT = 0;
 function showMsg(t, d = 1.5) { $('msg').innerText = t; msgT = d; }
 
 // ---------- input ----------
+const pad = { mx: 0, mz: 0, attack: false, special: false, connected: false, id: '', lookX: 0, lookY: 0 };
+const padPrev = { dodge: false, potion: false, options: false, share: false, lookBtn: false };
 addEventListener('keydown', e => {
   keys[e.code] = true;
   if (e.code === 'KeyJ') input.attack = true;
@@ -244,11 +260,17 @@ addEventListener('pointermove', e => {
     drag.x = e.clientX; drag.y = e.clientY;
   }
 });
-// touch controls
-const isTouch = matchMedia('(pointer:coarse)').matches || 'ontouchstart' in window;
+// touch: always show on coarse/touch devices; gamepad can be used at the same time
+const isTouch = matchMedia('(pointer:coarse)').matches || 'ontouchstart' in window || navigator.maxTouchPoints > 0;
 if (isTouch) $('touch').classList.remove('hidden');
 const stick = $('stick'), knob = $('knob'); let stickId = null;
-function stickMove(e) { const r = stick.getBoundingClientRect(); let dx = e.clientX - r.left - 110, dy = e.clientY - r.top - 110; const l = Math.hypot(dx, dy); if (l > 90) { dx *= 90 / l; dy *= 90 / l; } knob.style.transform = `translate(${dx}px,${dy}px)`; input.mx = dx / 90; input.mz = dy / 90; }
+function stickMove(e) {
+  const r = stick.getBoundingClientRect(), half = r.width / 2, maxR = half * 0.82;
+  let dx = e.clientX - r.left - half, dy = e.clientY - r.top - half;
+  const l = Math.hypot(dx, dy); if (l > maxR) { dx *= maxR / l; dy *= maxR / l; }
+  knob.style.transform = `translate(${dx}px,${dy}px)`;
+  input.mx = dx / maxR; input.mz = dy / maxR;
+}
 stick.addEventListener('pointerdown', e => { stickId = e.pointerId; stick.setPointerCapture(e.pointerId); stickMove(e); e.stopPropagation(); });
 stick.addEventListener('pointermove', e => { if (e.pointerId === stickId) stickMove(e); });
 const stickEnd = e => { if (e.pointerId === stickId) { stickId = null; input.mx = input.mz = 0; knob.style.transform = ''; } };
@@ -259,6 +281,89 @@ document.querySelectorAll('.ab').forEach(b => {
   const up = () => { if (a === 'attack' || a === 'special') input[a] = false; };
   b.addEventListener('pointerup', up); b.addEventListener('pointercancel', up);
 });
+
+// Gamepad API — DualSense / DualShock / generic standard mapping
+// 0 Cross/A attack · 1 Circle/B roll · 2 Square · 3 Triangle potion
+// 4 L1/LB special · 5 R1/RB attack · 8 Share mute · 9 Options restart
+// axes 0/1 left move · 2/3 right look · 12–15 d-pad look fallback
+function gpBtn(gp, i) { const b = gp.buttons[i]; return !!(b && (b.pressed || b.value > 0.5)); }
+function deadzone(v, z = 0.18) { return Math.abs(v) < z ? 0 : v; }
+function setPadStatus(on, label) {
+  const el = $('padstatus');
+  if (!el) return;
+  el.classList.toggle('on', !!on);
+  if (on) el.textContent = label || '手掣已連接';
+}
+function refreshPadPresence() {
+  const list = navigator.getGamepads ? navigator.getGamepads() : [];
+  let gp = null;
+  for (let i = 0; i < list.length; i++) if (list[i] && list[i].connected) { gp = list[i]; break; }
+  const was = pad.connected;
+  pad.connected = !!gp;
+  pad.id = gp ? (gp.id || 'gamepad') : '';
+  if (pad.connected !== was || (pad.connected && !$('padstatus')?.classList.contains('on'))) setPadStatus(pad.connected, '手掣已連接');
+  return gp;
+}
+addEventListener('gamepadconnected', e => {
+  pad.connected = true;
+  pad.id = (e.gamepad && e.gamepad.id) || 'gamepad';
+  setPadStatus(true, '手掣已連接');
+});
+addEventListener('gamepaddisconnected', () => {
+  refreshPadPresence();
+  if (!pad.connected) {
+    pad.mx = pad.mz = 0; pad.attack = pad.special = false; pad.lookX = pad.lookY = 0;
+    setPadStatus(false);
+  }
+});
+
+function pollGamepad(dt) {
+  const gp = refreshPadPresence();
+  if (!gp) { pad.mx = pad.mz = 0; pad.attack = pad.special = false; pad.lookX = pad.lookY = 0; return; }
+  const ax = gp.axes || [];
+  pad.mx = deadzone(ax[0] || 0);
+  pad.mz = deadzone(ax[1] || 0);
+  // attack: Cross/A or R1/RB
+  pad.attack = gpBtn(gp, 0) || gpBtn(gp, 5);
+  // special/block: L1/LB
+  pad.special = gpBtn(gp, 4);
+  // roll: Circle/B (edge)
+  const dodgeNow = gpBtn(gp, 1);
+  if (dodgeNow && !padPrev.dodge) input.dodge = true;
+  padPrev.dodge = dodgeNow;
+  // potion: Triangle/Y (edge)
+  const potNow = gpBtn(gp, 3);
+  if (potNow && !padPrev.potion) input.potion = true;
+  padPrev.potion = potNow;
+  // look: right stick if present, else d-pad, else face Square + held look via buttons 12-15 / 2
+  let lx = 0, ly = 0;
+  const hasRight = ax.length >= 4;
+  if (hasRight) { lx = deadzone(ax[2] || 0); ly = deadzone(ax[3] || 0); }
+  if (!lx && !ly) {
+    if (gpBtn(gp, 14)) lx -= 1; // d-pad left
+    if (gpBtn(gp, 15)) lx += 1;
+    if (gpBtn(gp, 12)) ly -= 1; // up
+    if (gpBtn(gp, 13)) ly += 1;
+  }
+  if (!hasRight && !lx && !ly) {
+    // no right stick / d-pad activity: Square + face as coarse look (hold Square then use Cross/Circle)
+    if (gpBtn(gp, 2)) {
+      if (gpBtn(gp, 0)) ly += 1; if (gpBtn(gp, 1)) lx += 1; if (gpBtn(gp, 3)) ly -= 1;
+    }
+  }
+  pad.lookX = lx; pad.lookY = ly;
+  if (lx || ly) {
+    camYaw -= lx * 2.4 * dt;
+    camPitch = THREE.MathUtils.clamp(camPitch + ly * 1.6 * dt, 0.05, 1.1);
+  }
+  // Options → restart to title; Share → mute
+  const optNow = gpBtn(gp, 9);
+  if (optNow && !padPrev.options) { S = null; ['stats', 'over'].forEach(id => $(id).classList.add('hidden')); $('title').classList.remove('hidden'); }
+  padPrev.options = optNow;
+  const shareNow = gpBtn(gp, 8);
+  if (shareNow && !padPrev.share) { muted = !muted; $('mute').textContent = muted ? '🔇 靜' : '🔊 聲'; }
+  padPrev.share = shareNow;
+}
 
 // ---------- UI panels ----------
 document.querySelectorAll('#title button').forEach(b => b.onclick = () => { run.weapon = b.dataset.w; run.fight = 0; run.pts = 0; for (const k in run.stats) run.stats[k] = 0; snd(440); startFight(); });
@@ -446,9 +551,11 @@ function updateDragon(dt, t) {
 function updatePlayer(dt) {
   const w = WEAPONS[run.weapon];
   S.cd -= dt; S.invuln -= dt; S.dodgeT -= dt; S.hurtT -= dt; S.swing -= dt;
-  let mx = input.mx + ((keys.KeyD ? 1 : 0) - (keys.KeyA ? 1 : 0));
-  let mz = input.mz + ((keys.KeyS ? 1 : 0) - (keys.KeyW ? 1 : 0));
+  let mx = input.mx + pad.mx + ((keys.KeyD || keys.ArrowRight ? 1 : 0) - (keys.KeyA || keys.ArrowLeft ? 1 : 0));
+  let mz = input.mz + pad.mz + ((keys.KeyS || keys.ArrowDown ? 1 : 0) - (keys.KeyW || keys.ArrowUp ? 1 : 0));
   const ml = Math.hypot(mx, mz); if (ml > 1) { mx /= ml; mz /= ml; }
+  const attackHeld = input.attack || pad.attack;
+  const specialHeld = input.special || pad.special;
   const cy = Math.cos(camYaw), sy = Math.sin(camYaw);
   // camera looks along -(sin yaw, cos yaw) from behind → forward = (sin,cos) of camYaw
   const dir = new THREE.Vector3(-mx * cy - mz * sy, 0, mx * sy - mz * cy);
@@ -473,18 +580,18 @@ function updatePlayer(dt) {
   const faceDragon = () => { const v = tmp.copy(dragon.root.position).sub(player.position); if (v.length() < 14) player.rotation.y = Math.atan2(v.x, v.z); };
   S.block = false;
   if (run.weapon === 'gs') {
-    if (input.special && S.cd <= 0) { if (S.charge < 0) { S.charge = 0; faceDragon(); } S.charge = Math.min(1.6, S.charge + dt); if (S.charge >= 1.6 && Math.random() < 0.1) snd(1000, 0.03); }
+    if (specialHeld && S.cd <= 0) { if (S.charge < 0) { S.charge = 0; faceDragon(); } S.charge = Math.min(1.6, S.charge + dt); if (S.charge >= 1.6 && Math.random() < 0.1) snd(1000, 0.03); }
     else if (S.charge >= 0) { const c = S.charge; S.charge = -1; S.cd = w.cd * 1.3; S.swing = S.swingDur = 0.55; S.combo = (S.combo || 0) + 1; doHit(1 + c * 1.6, c > 1.2 ? '蓄力斬！' : null); }
   } else if (run.weapon === 'ss') {
-    if (input.special && S.st > 0) { S.block = true; S.st -= 8 * dt; }
+    if (specialHeld && S.st > 0) { S.block = true; S.st -= 8 * dt; }
   } else if (run.weapon === 'db') {
-    if (input.special && S.st > 5 && S.cd <= 0) { faceDragon(); S.st -= 6; S.cd = 0.1; S.swing = S.swingDur = 0.3; S.combo = (S.combo || 0) + 1; doHit(0.9, null); }
+    if (specialHeld && S.st > 5 && S.cd <= 0) { faceDragon(); S.st -= 6; S.cd = 0.1; S.swing = S.swingDur = 0.3; S.combo = (S.combo || 0) + 1; doHit(0.9, null); }
   }
-  if (input.attack && S.dodgeT <= 0 && S.cd <= 0 && S.drinkT <= 0 && S.charge < 0 && !S.block) {
+  if (attackHeld && S.dodgeT <= 0 && S.cd <= 0 && S.drinkT <= 0 && S.charge < 0 && !S.block) {
     faceDragon(); S.cd = w.cd; S.swing = S.swingDur = run.weapon === 'gs' ? 0.7 : run.weapon === 'ss' ? 0.32 : 0.34; S.combo = (S.combo || 0) + 1; doHit(1);
-    if (run.weapon === 'gs') input.attack = false;
+    if (run.weapon === 'gs') { input.attack = false; /* pad.attack stays while held; CD gates repeats */ }
   }
-  if (!input.special && !S.block && S.dodgeT <= 0 && S.charge < 0) S.st = Math.min(S.ps.maxSt, S.st + 28 * dt);
+  if (!specialHeld && !S.block && S.dodgeT <= 0 && S.charge < 0) S.st = Math.min(S.ps.maxSt, S.st + 28 * dt);
   const r = Math.hypot(player.position.x, player.position.z);
   if (r > ARENA) { player.position.x *= ARENA / r; player.position.z *= ARENA / r; }
   animatePlayer(dt);
@@ -573,6 +680,7 @@ function hud() {
 function frame() {
   requestAnimationFrame(frame);
   const dt = Math.min(clock.getDelta(), 0.05); time += dt;
+  pollGamepad(dt);
   if (S && dragon) {
     if (!S.over || S.ai.state === 'dead') { if (S.introT > 0) S.introT -= dt; else updateDragon(dt, time); }
     if (!S.over) updatePlayer(dt);
@@ -597,4 +705,4 @@ function frame() {
 // title backdrop dragon
 dragon = buildDragon(DRAGONS[0]); dragon.root.position.set(0, 0, 10);
 frame();
-window.__hunt = { run, get S() { return S; }, startFight, severTail };
+window.__hunt = { run, get S() { return S; }, startFight, severTail, pad, pollGamepad, refreshPadPresence, input, keys };
