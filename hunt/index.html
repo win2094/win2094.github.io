@@ -23,6 +23,9 @@ canvas{display:block;position:fixed;inset:0;width:100%!important;height:100%!imp
 #padstatus{position:absolute;left:50%;bottom:max(8px,env(safe-area-inset-bottom));transform:translateX(-50%);font-size:18px;font-weight:600;color:#a8c0cc;text-shadow:0 2px 6px #000;opacity:0;transition:opacity .25s;pointer-events:none;z-index:4}
 #padstatus.on{opacity:.85}
 #help{position:absolute;left:max(10px,env(safe-area-inset-left));bottom:max(8px,env(safe-area-inset-bottom));max-width:min(42vw,380px);font-size:15px;line-height:1.35;opacity:.55;text-shadow:0 1px 3px #000;pointer-events:none}
+#debuffs{position:absolute;left:max(12px,env(safe-area-inset-left));top:max(120px,calc(env(safe-area-inset-top) + 110px));display:flex;flex-direction:column;gap:6px;font-size:22px;font-weight:700;text-shadow:0 2px 4px #000}
+#debuffs .db{padding:4px 10px;border-radius:8px;background:#0009;border:2px solid #fff5}
+#vignette{position:fixed;inset:0;pointer-events:none;z-index:8;opacity:0;transition:opacity .2s;background:radial-gradient(circle at center,transparent 40%,#000 100%)}
 #touch{position:absolute;inset:0;pointer-events:none;z-index:3;touch-action:none}
 #stick{position:absolute;left:max(16px,env(safe-area-inset-left));bottom:max(20px,calc(env(safe-area-inset-bottom) + 12px));width:min(42vw,200px);height:min(42vw,200px);min-width:120px;min-height:120px;border-radius:50%;background:#fff2;border:3px solid #fff5;pointer-events:auto;touch-action:none}
 #knob{position:absolute;left:50%;top:50%;width:36%;height:36%;margin-left:-18%;margin-top:-18%;border-radius:50%;background:#fff6;transform:translate(0,0)}
@@ -72,9 +75,11 @@ canvas{display:block;position:fixed;inset:0;width:100%!important;height:100%!imp
 <body>
 <div id="hud">
   <div id="ptop"><div class="lbl" id="pname">獵人</div><div class="bar"><div id="php" style="background:#3c3;width:100%"></div></div><div class="bar" style="height:18px;margin-top:6px"><div id="pst" style="background:#fc3;width:100%"></div></div><div class="lbl" id="pot">藥水 ×3</div></div>
-  <div id="dtop"><div class="lbl" id="dname">火龍</div><div class="bar"><div id="dhp" style="background:#d33;width:100%;margin-left:auto"></div></div><div class="lbl" id="tail">尾：完好</div></div>
+  <div id="dtop"><div class="lbl" id="dname">龍</div><div class="bar"><div id="dhp" style="background:#d33;width:100%;margin-left:auto"></div></div><div class="lbl" id="tail">尾：完好</div><div class="lbl" id="dtraits" style="font-size:18px;opacity:.85"></div></div>
   <div id="btns"><button class="sb" id="mute">🔊 聲</button><button class="sb" id="restart">↻ 重新</button></div>
+  <div id="debuffs"></div>
   <div id="tele"></div><div id="msg"></div>
+  <div id="vignette"></div>
   <div id="padstatus">手掣已連接</div>
   <div id="help">鍵：WASD移動 · 滑鼠視角 · J連擊 · K技 · 空白翻滾 · Q藥<br>手掣：左搖桿移動 · 右搖桿視角 · ✕/R1連擊 · ○翻滾 · L1技 · △藥</div>
   <div id="touch" class="hidden"><div id="stick"><div id="knob"></div></div>
@@ -85,6 +90,7 @@ canvas{display:block;position:fixed;inset:0;width:100%!important;height:100%!imp
   <button data-w="ss">單手劍（快、可格擋）</button>
   <button data-w="db">雙刀（極快連擊）</button>
   <div id="keys">連擊：連按攻擊可接大劍3段／單手劍4段／雙刀4段（停一停會斷招）<br>電腦：WASD移動、滑鼠／J攻擊、K技、空白翻滾、Q藥<br>手掣：左搖桿移動、右搖桿視角、✕／R1攻擊、○翻滾、L1技、△藥<br>手機：虛擬搖桿＋大按鈕</div></div>
+<div class="panel hidden" id="preview"><h1 id="ptitle">下一戰</h1><div id="pcard" style="font-size:clamp(18px,4vw,28px);line-height:1.5;max-width:min(640px,92vw);text-align:left"></div><button id="pgo">開戰</button></div>
 <div class="panel hidden" id="stats"><h1 id="stitle">勝利！</h1><div id="spts"></div><div id="slist"></div><button id="snext">下一戰</button></div>
 <div class="panel hidden" id="over"><h1 id="otitle">狩獵失敗</h1><div id="otext"></div><button id="oagain">再嚟</button></div>
 <script type="module" src="game.js"></script>
