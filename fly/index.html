@@ -150,7 +150,7 @@ header p { margin: 4px 0 0; color: var(--muted); font-size: 0.9rem; line-height:
 <body>
   <div class="wrap">
     <header>
-      <h1>FLY 3D · v8.1</h1>
+      <h1>FLY 3D · v8.2</h1>
       <p>F-22 · BOSS 關卡循環 · 導彈彈匣 · W 加速／X 減速 · 手機觸控／鍵盤／滑鼠都得</p>
     </header>
     <div class="stage">
@@ -704,6 +704,8 @@ header p { margin: 4px 0 0; color: var(--muted); font-size: 0.9rem; line-height:
   };
   const PICKUP_KINDS = ["shot", "thunder", "blast"];
   const pickups = [];
+  // Generous grab radius: pickups stay put, so the player has to fly back through them
+  const PICKUP_R = 24;
   const pickupTex = {};
   for (const k of PICKUP_KINDS) {
     pickupTex[k] = spriteTex(32, (g) => {
@@ -719,12 +721,12 @@ header p { margin: 4px 0 0; color: var(--muted); font-size: 0.9rem; line-height:
   function spawnPickup(pos, kind = PICKUP_KINDS[(Math.random() * PICKUP_KINDS.length) | 0]) {
     const mat = new T3.SpriteMaterial({ map: pickupTex[kind], transparent: true, depthWrite: false, depthTest: false });
     const sp = new T3.Sprite(mat);
-    sp.scale.setScalar(7);
+    sp.scale.setScalar(10);
     const at = pos.clone();
     at.y = Math.max(at.y, groundH(at.x, at.z) + 25);
     sp.position.copy(at);
     scene.add(sp);
-    pickups.push({ sp, kind, base: at, t: 0, life: 22 });
+    pickups.push({ sp, kind, base: at, t: 0, life: 40 });
   }
   function clearPickups() {
     for (const k of pickups) { scene.remove(k.sp); k.sp.material.dispose(); }
@@ -746,14 +748,12 @@ header p { margin: 4px 0 0; color: var(--muted); font-size: 0.9rem; line-height:
       k.life -= dt;
       k.sp.position.copy(k.base);
       k.sp.position.y += Math.sin(k.t * 2.5) * 2;
-      const pulse = 7 + Math.sin(k.t * 6) * 0.8;
+      const pulse = 10 + Math.sin(k.t * 6) * 1.2;
       k.sp.scale.setScalar(pulse);
       k.sp.material.opacity = k.life < 4 ? (Math.floor(k.t * 8) % 2 ? 0.3 : 1) : 1;
-      // Gentle magnet so pickups are easy to grab at speed
       if (player.mode === "fly") {
         const d = player.pos.distanceTo(k.sp.position);
-        if (d < 40) k.base.lerp(player.pos, Math.min(1, dt * 3));
-        if (d < 10) {
+        if (d < PICKUP_R) {
           takePickup(k.kind);
           addSprite(TEX_FLASH, k.sp.position.clone(), 6, 14, 0.25, 0xffffff);
           scene.remove(k.sp);
