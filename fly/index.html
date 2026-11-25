@@ -150,7 +150,7 @@ header p { margin: 4px 0 0; color: var(--muted); font-size: 0.9rem; line-height:
 <body>
   <div class="wrap">
     <header>
-      <h1>FLY 3D · v7.1</h1>
+      <h1>FLY 3D · v8</h1>
       <p>F-22 · BOSS 關卡循環 · 導彈彈匣 · W 加速／X 減速 · 手機觸控／鍵盤／滑鼠都得</p>
     </header>
     <div class="stage">
@@ -174,6 +174,7 @@ header p { margin: 4px 0 0; color: var(--muted); font-size: 0.9rem; line-height:
       <span><kbd>M</kbd> 靜音 · <kbd>R</kbd> 重開</span>
       <span>方向捍／滑鼠：向上＝機頭向下，向下＝機頭向上（E 仍係攀升）</span>
       <span>手機：左半虛擬搖桿，右下機槍／導彈／反轉／加速／減速</span>
+      <span>每擊落 3 架敵機掉武器：散＝散彈槍（近距大範圍高攻）、雷＝雷電（中距追蹤低攻）、爆＝破爆槍（大彈射得遠）。食同款升級最多 Lv3，食另一款變返 Lv1，死咗返機槍</span>
       <span>BOSS 散彈可打落你嘅導彈 · 每過一循環（LOOP）難度上升</span>
       <span>撳一下畫面或任何鍵開聲</span>
     </div>
@@ -668,17 +669,173 @@ header p { margin: 4px 0 0; color: var(--muted); font-size: 0.9rem; line-height:
   const PELLET_GEO = new T3.SphereGeometry(2.4, 8, 6);
   const PELLET_MAT = new T3.MeshBasicMaterial({ color: 0xffe060 });
   const PELLET_OUT = new T3.MeshBasicMaterial({ color: 0xff7020 });
+  const SHOT_GEO = new T3.SphereGeometry(1.3, 6, 4);
+  const SHOT_MAT = new T3.MeshBasicMaterial({ color: 0xffb030 });
+  const BOLT_GEO = new T3.BoxGeometry(0.5, 0.5, 6);
+  const BOLT_MAT = new T3.MeshBasicMaterial({ color: 0x60e0ff });
+  const BLAST_GEO = new T3.SphereGeometry(1, 10, 8);
+  const BLAST_MAT = new T3.MeshBasicMaterial({ color: 0xff50c0 });
   function shoot(pos, dir, speed, friendly, o = {}) {
-    const geo = o.pellet ? PELLET_GEO : o.shell ? SHELL_GEO : BULLET_GEO;
-    const mat = o.pellet ? (o.pelletOut ? PELLET_OUT : PELLET_MAT) : o.shell ? SHELL_MAT : friendly ? BULLET_P : BULLET_E;
+    const geo = o.geo || (o.pellet ? PELLET_GEO : o.shell ? SHELL_GEO : BULLET_GEO);
+    const mat = o.mat || (o.pellet ? (o.pelletOut ? PELLET_OUT : PELLET_MAT) : o.shell ? SHELL_MAT : friendly ? BULLET_P : BULLET_E);
     const m = new T3.Mesh(geo, mat);
     m.position.copy(pos);
     m.lookAt(pos.clone().add(dir));
+    if (o.scale) m.scale.setScalar(o.scale);
     scene.add(m);
-    bullets.push({
+    const b = {
       m, vel: dir.clone().multiplyScalar(speed), friendly,
       life: o.life || 1.2, dmg: o.dmg || 5, r: o.r || 3.8, pellet: !!o.pellet,
+      pdmg: o.pdmg || 6, bdmg: o.bdmg || o.pdmg || 6, extra: o.extra || 0,
+      homing: !!o.homing, speed, big: !!o.big,
+    };
+    bullets.push(b);
+    return b;
+  }
+
+  // ── Player weapons (dropped every 3 fighter kills) ──────────
+  // shot = short-range wide high-damage spread; thunder = mid-range homing, low damage;
+  // blast = one big long-range shell. Same pickup levels up (max 3), a different one resets to Lv1.
+  const WEAPONS = {
+    gun: { name: "GUN", color: "#ffe860" },
+    shot: { name: "SHOTGUN", color: "#ffb030", label: "散" },
+    thunder: { name: "THUNDER", color: "#60e0ff", label: "雷" },
+    blast: { name: "BLAST", color: "#ff50c0", label: "爆" },
+  };
+  const PICKUP_KINDS = ["shot", "thunder", "blast"];
+  const pickups = [];
+  const pickupTex = {};
+  for (const k of PICKUP_KINDS) {
+    pickupTex[k] = spriteTex(32, (g) => {
+      disc(g, 16, 15, "#ffffff");
+      disc(g, 16, 13, WEAPONS[k].color);
+      g.fillStyle = "#101820";
+      g.font = "bold 18px sans-serif";
+      g.textAlign = "center";
+      g.textBaseline = "middle";
+      g.fillText(WEAPONS[k].label, 16, 17);
     });
+  }
+  function spawnPickup(pos, kind = PICKUP_KINDS[(Math.random() * PICKUP_KINDS.length) | 0]) {
+    const mat = new T3.SpriteMaterial({ map: pickupTex[kind], transparent: true, depthWrite: false, depthTest: false });
+    const sp = new T3.Sprite(mat);
+    sp.scale.setScalar(7);
+    const at = pos.clone();
+    at.y = Math.max(at.y, groundH(at.x, at.z) + 25);
+    sp.position.copy(at);
+    scene.add(sp);
+    pickups.push({ sp, kind, base: at, t: 0, life: 22 });
+  }
+  function clearPickups() {
+    for (const k of pickups) { scene.remove(k.sp); k.sp.material.dispose(); }
+    pickups.length = 0;
+  }
+  function takePickup(kind) {
+    if (player.weapon === kind) player.wlv = Math.min(3, player.wlv + 1);
+    else { player.weapon = kind; player.wlv = 1; }
+    player.wToast = `${WEAPONS[kind].name} Lv${player.wlv}${player.wlv === 3 ? " MAX" : ""}`;
+    player.wToastT = 2;
+    sfx.beep(660, 0.08, 0.2);
+    setTimeout(() => sfx.beep(990, 0.12, 0.2), 90);
+  }
+  function updatePickups(dt) {
+    player.wToastT = Math.max(0, player.wToastT - dt);
+    for (let i = pickups.length - 1; i >= 0; i--) {
+      const k = pickups[i];
+      k.t += dt;
+      k.life -= dt;
+      k.sp.position.copy(k.base);
+      k.sp.position.y += Math.sin(k.t * 2.5) * 2;
+      const pulse = 7 + Math.sin(k.t * 6) * 0.8;
+      k.sp.scale.setScalar(pulse);
+      k.sp.material.opacity = k.life < 4 ? (Math.floor(k.t * 8) % 2 ? 0.3 : 1) : 1;
+      // Gentle magnet so pickups are easy to grab at speed
+      if (player.mode === "fly") {
+        const d = player.pos.distanceTo(k.sp.position);
+        if (d < 40) k.base.lerp(player.pos, Math.min(1, dt * 3));
+        if (d < 10) {
+          takePickup(k.kind);
+          addSprite(TEX_FLASH, k.sp.position.clone(), 6, 14, 0.25, 0xffffff);
+          scene.remove(k.sp);
+          k.sp.material.dispose();
+          pickups.splice(i, 1);
+          continue;
+        }
+      }
+      if (k.life <= 0) {
+        scene.remove(k.sp);
+        k.sp.material.dispose();
+        pickups.splice(i, 1);
+      }
+    }
+  }
+  function nearestTarget(from, fwd, range) {
+    let best = null;
+    let bd = range;
+    for (const t of lockables()) {
+      const v = t.pos.clone().sub(from);
+      const d = v.length();
+      if (d < bd && v.dot(fwd) > d * 0.2) { bd = d; best = t; }
+    }
+    return best;
+  }
+  function firePlayerWeapon(f, u, r) {
+    const lv = player.wlv;
+    const nose = player.pos.clone().addScaledVector(f, 3.5).addScaledVector(u, -0.3);
+    const jitter = (a) => new T3.Vector3(rnd(-a, a), rnd(-a, a), rnd(-a, a));
+    switch (player.weapon) {
+      case "shot": {
+        player.gunCd = [0.34, 0.3, 0.26][lv - 1];
+        const n = [6, 8, 11][lv - 1];
+        const spread = [0.13, 0.16, 0.2][lv - 1];
+        for (let i = 0; i < n; i++) {
+          const dir = f.clone()
+            .addScaledVector(r, rnd(-spread, spread))
+            .addScaledVector(u, rnd(-spread * 0.7, spread * 0.7))
+            .normalize();
+          shoot(nose, dir, 300 + player.speed, true, {
+            geo: SHOT_GEO, mat: SHOT_MAT, life: 0.42, pdmg: [10, 12, 15][lv - 1], bdmg: [8, 10, 12][lv - 1], extra: 1.5,
+          });
+        }
+        addSprite(TEX_FLASH, nose.clone().addScaledVector(f, 2), 4, 2.5, 0.08, 0xffd080);
+        sfx.boom(false, 0.22);
+        break;
+      }
+      case "thunder": {
+        player.gunCd = [0.14, 0.11, 0.085][lv - 1];
+        const n = lv;
+        player.gunSide *= -1;
+        for (let i = 0; i < n; i++) {
+          const side = n === 1 ? player.gunSide : (i - (n - 1) / 2) * 1.8;
+          const muzzle = nose.clone().addScaledVector(r, side * 1.4);
+          const dir = f.clone().addScaledVector(r, side * 0.04).add(jitter(0.02)).normalize();
+          shoot(muzzle, dir, 240 + player.speed, true, {
+            geo: BOLT_GEO, mat: BOLT_MAT, life: 1.5, pdmg: [3, 4, 5][lv - 1], bdmg: [2.5, 3, 4][lv - 1], extra: 1, homing: true,
+          });
+        }
+        sfx.beep(1400 + Math.random() * 300, 0.04, 0.06);
+        break;
+      }
+      case "blast": {
+        player.gunCd = [0.75, 0.62, 0.5][lv - 1];
+        shoot(nose.clone().addScaledVector(f, 2), f.clone(), 360 + player.speed, true, {
+          geo: BLAST_GEO, mat: BLAST_MAT, scale: [1.8, 2.4, 3.0][lv - 1], life: 2.8,
+          pdmg: [45, 65, 90][lv - 1], bdmg: [35, 50, 70][lv - 1], extra: [3, 4, 5][lv - 1], big: true,
+        });
+        addSprite(TEX_FLASH, nose.clone().addScaledVector(f, 3), 6, 3, 0.12, 0xff80e0);
+        sfx.boom(false, 0.4);
+        break;
+      }
+      default: {
+        player.gunCd = 0.06;
+        player.gunSide *= -1;
+        const muzzle = player.pos.clone().addScaledVector(r, player.gunSide * 1.6).addScaledVector(f, 3).addScaledVector(u, -0.3);
+        const dir = f.clone().add(jitter(0.01)).normalize();
+        shoot(muzzle, dir, 420 + player.speed, true);
+        sfx.gun();
+        if (Math.random() < 0.5) addSprite(TEX_FLASH, muzzle.clone().addScaledVector(f, 1), 1.6, 1.2, 0.05, 0xffffff);
+      }
+    }
   }
   // Slow, wide, easy-to-see scatter burst (boss flak / 散彈)
   function fireScatter(from, toward, count, speed, spread, o = {}) {
@@ -719,6 +876,7 @@ header p { margin: 4px 0 0; color: var(--muted); font-size: 0.9rem; line-height:
     bank: 0, sx: 0, sy: 0, speed: 60,
     hp: 100, invuln: 0, gunCd: 0, misCd: 0, gunSide: 1,
     misAmmo: 10, misReload: 0, misMax: 10, misReloadTime: 8,
+    weapon: "gun", wlv: 1, kills: 0, wToast: "", wToastT: 0,
     rev: 0, revDir: 1, revCd: 0, revReq: false, lockState: 0,
     score: 0, mode: "fly", hitFlash: 0,
   };
@@ -838,6 +996,8 @@ header p { margin: 4px 0 0; color: var(--muted); font-size: 0.9rem; line-height:
     scene.remove(e.jet);
     enemies.splice(i, 1);
     player.score++;
+    player.kills++;
+    if (player.kills % 3 === 0) spawnPickup(e.pos);
   }
 
   // ── Audio (WebAudio synth; browsers only allow it after first input) ──
@@ -1105,7 +1265,8 @@ header p { margin: 4px 0 0; color: var(--muted); font-size: 0.9rem; line-height:
     eLaunchCd = 6;
     player.pos.set(T * 0.5, 75, T * 0.05);
     player.q.identity();
-    Object.assign(player, { bank: 0, sx: 0, sy: 0, speed: 60, hp: 100, invuln: 1.5, score: 0, mode: "fly", rev: 0, revCd: 0, misAmmo: 10, misReload: 0, misCd: 0 });
+    Object.assign(player, { bank: 0, sx: 0, sy: 0, speed: 60, hp: 100, invuln: 1.5, score: 0, mode: "fly", rev: 0, revCd: 0, misAmmo: 10, misReload: 0, misCd: 0, weapon: "gun", wlv: 1, kills: 0, wToastT: 0 });
+    clearPickups();
     playerJet.visible = true;
     pilot.visible = false;
     rescueJet.visible = false;
@@ -1122,6 +1283,8 @@ header p { margin: 4px 0 0; color: var(--muted); font-size: 0.9rem; line-height:
     if (player.mode !== "fly") return;
     player.mode = "eject";
     player.hp = 0;
+    player.weapon = "gun";
+    player.wlv = 1;
     boom(player.pos, 12);
     playerJet.visible = false;
     trailL.line.visible = trailR.line.visible = false;
@@ -1731,15 +1894,7 @@ header p { margin: 4px 0 0; color: var(--muted); font-size: 0.9rem; line-height:
     const u = upOf(player.q);
     const r = rightOf(player.q);
 
-    if ((keys.j || mouse.l || touchCtl.gun) && player.gunCd <= 0) {
-      player.gunCd = 0.06;
-      player.gunSide *= -1;
-      const muzzle = player.pos.clone().addScaledVector(r, player.gunSide * 1.6).addScaledVector(f, 3).addScaledVector(u, -0.3);
-      const dir = f.clone().add(new T3.Vector3(rnd(-0.01, 0.01), rnd(-0.01, 0.01), rnd(-0.01, 0.01))).normalize();
-      shoot(muzzle, dir, 420 + player.speed, true);
-      sfx.gun();
-      if (Math.random() < 0.5) addSprite(TEX_FLASH, muzzle.clone().addScaledVector(f, 1), 1.6, 1.2, 0.05, 0xffffff);
-    }
+    if ((keys.j || mouse.l || touchCtl.gun) && player.gunCd <= 0) firePlayerWeapon(f, u, r);
 
     // Lock-on: enemies inside a 14° cone ahead build lock time
     const coneCos = Math.cos(T3.MathUtils.degToRad(14));
@@ -1919,12 +2074,22 @@ header p { margin: 4px 0 0; color: var(--muted); font-size: 0.9rem; line-height:
     for (let i = bullets.length - 1; i >= 0; i--) {
       const b = bullets[i];
       b.life -= dt;
+      if (b.homing) {
+        if (!b.target || !targetAlive(b.target)) b.target = nearestTarget(b.m.position, b.vel.clone().normalize(), 380);
+        if (b.target) {
+          const want = b.target.pos.clone().sub(b.m.position).normalize();
+          const dir = b.vel.clone().normalize().lerp(want, Math.min(1, 7 * dt)).normalize();
+          b.vel.copy(dir).multiplyScalar(b.speed);
+          b.m.lookAt(b.m.position.clone().add(dir));
+        }
+      }
       b.m.position.addScaledVector(b.vel, dt);
       let hit = false;
       if (b.friendly) {
-        if (damageAt(b.m.position, 6, 6, 0)) {
+        if (damageAt(b.m.position, b.pdmg, b.bdmg, b.extra)) {
           hit = true;
-          addSprite(TEX_BOOM, b.m.position, 1.2, 3, 0.2, 0xffffff);
+          if (b.big) boom(b.m.position, 6);
+          else addSprite(TEX_BOOM, b.m.position, 1.2, 3, 0.2, 0xffffff);
         }
       } else if (player.mode === "fly" && player.invuln <= 0 && player.pos.distanceTo(b.m.position) < b.r) {
         hit = true;
@@ -2128,6 +2293,28 @@ header p { margin: 4px 0 0; color: var(--muted); font-size: 0.9rem; line-height:
     hx.fillText(player.misReload > 0 ? "RLD" : `MSL ${player.misAmmo}`, 80, RH - 32);
     hx.fillText("REV", 80, RH - 23);
     hx.fillText(`ALT ${Math.max(0, player.pos.y) | 0}  SPD ${player.speed | 0}`, 6, RH - 9);
+    hx.fillStyle = "rgba(10,16,28,0.7)";
+    hx.fillRect(4, RH - 62, 124, 11);
+    const w = WEAPONS[player.weapon];
+    hx.fillStyle = w.color;
+    hx.fillText(player.weapon === "gun" ? "GUN" : `${w.name} Lv${player.wlv}`, 6, RH - 54);
+    if (player.weapon !== "gun") {
+      for (let i = 0; i < 3; i++) {
+        hx.fillStyle = i < player.wlv ? w.color : "#2a3448";
+        hx.fillRect(84 + i * 7, RH - 59, 5, 5);
+      }
+    }
+    hx.fillStyle = "#9aa8c0";
+    hx.fillText(`${3 - (player.kills % 3)}`, 118, RH - 54);
+    if (player.wToastT > 0) {
+      hx.font = "bold 12px monospace";
+      const tw = hx.measureText(player.wToast).width;
+      hx.fillStyle = "rgba(0,0,0,0.55)";
+      hx.fillRect((RW - tw) / 2 - 4, 62, tw + 8, 15);
+      hx.fillStyle = w.color;
+      hx.fillText(player.wToast, (RW - tw) / 2, 73);
+      hx.font = "8px monospace";
+    }
     hx.font = "9px monospace";
     hx.fillText(`SCORE ${player.score}`, RW - 78, 14);
     if (sfx.isMuted()) hx.fillText("MUTE (M)", RW - 78, 25);
@@ -2279,6 +2466,13 @@ header p { margin: 4px 0 0; color: var(--muted); font-size: 0.9rem; line-height:
       hx.strokeStyle = "#ffffff";
       hx.strokeRect(p.x - 3.5, p.y - 3.5, 7, 7);
     }
+    for (const k of pickups) {
+      const p = toRadar(k.sp.position);
+      hx.fillStyle = WEAPONS[k.kind].color;
+      hx.beginPath();
+      hx.arc(p.x, p.y, 2.5, 0, Math.PI * 2);
+      hx.fill();
+    }
     if (blink) {
       hx.fillStyle = "#ffffff";
       for (const m of eMissiles) {
@@ -2346,6 +2540,7 @@ header p { margin: 4px 0 0; color: var(--muted); font-size: 0.9rem; line-height:
     updateEnemies(dt);
     updateBoss(dt);
     updateProjectiles(dt);
+    updatePickups(dt);
     updateAlerts(dt);
     updateFx(dt);
     updatePlayerVisual();
