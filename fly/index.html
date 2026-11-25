@@ -150,7 +150,7 @@ header p { margin: 4px 0 0; color: var(--muted); font-size: 0.9rem; line-height:
 <body>
   <div class="wrap">
     <header>
-      <h1>FLY 3D · v8</h1>
+      <h1>FLY 3D · v8.1</h1>
       <p>F-22 · BOSS 關卡循環 · 導彈彈匣 · W 加速／X 減速 · 手機觸控／鍵盤／滑鼠都得</p>
     </header>
     <div class="stage">
@@ -1276,6 +1276,7 @@ header p { margin: 4px 0 0; color: var(--muted); font-size: 0.9rem; line-height:
     if (stage.boss) scene.remove(stage.boss.group);
     stage.boss = null;
     startStage(START_STAGE);
+    stage.creditT = 5;
     snapCamera();
   }
 
@@ -1355,7 +1356,8 @@ header p { margin: 4px 0 0; color: var(--muted); font-size: 0.9rem; line-height:
   const BOSS_NAME = {
     battleship: "BATTLESHIP", tank: "LAND TANK", fortress: "SKY FORTRESS", carrier: "CARRIER", ace: "ACE PILOT F-18",
   };
-  const stage = { n: 0, boss: null, nextT: 0, banner: "", bannerT: 0 };
+  const stage = { n: 0, boss: null, nextT: 0, banner: "", bannerT: 0, creditT: 5 };
+  const CREDIT = "Created by William Hsu";
   const params = new URLSearchParams(location.search);
   const START_STAGE = Math.max(0, (parseInt(params.get("stage"), 10) || 1) - 1);
   const BOX = new T3.BoxGeometry(1, 1, 1);
@@ -1715,6 +1717,7 @@ header p { margin: 4px 0 0; color: var(--muted); font-size: 0.9rem; line-height:
   function updateBoss(dt) {
     const b = stage.boss;
     stage.bannerT -= dt;
+    stage.creditT -= dt;
     if (!b) {
       if (stage.nextT > 0) {
         stage.nextT -= dt;
@@ -2382,6 +2385,18 @@ header p { margin: 4px 0 0; color: var(--muted); font-size: 0.9rem; line-height:
       hx.fillRect((RW - w) / 2 - 6, RH / 2 - 52, w + 12, 22);
       hx.fillStyle = stage.banner === "STAGE CLEAR" ? "#7dffb0" : "#ffe060";
       hx.fillText(stage.banner, (RW - w) / 2, RH / 2 - 35);
+    }
+    if (stage.creditT > 0) {
+      const a = Math.min(1, stage.creditT / 0.8);
+      hx.globalAlpha = a;
+      hx.font = "bold 13px monospace";
+      const w = hx.measureText(CREDIT).width;
+      hx.fillStyle = "rgba(10,16,28,0.65)";
+      hx.fillRect((RW - w) / 2 - 8, RH / 2 - 22, w + 16, 20);
+      hx.fillStyle = "#ffffff";
+      hx.fillText(CREDIT, (RW - w) / 2, RH / 2 - 8);
+      hx.globalAlpha = 1;
+      hx.font = "8px monospace";
     }
   }
 
