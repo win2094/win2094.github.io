@@ -3,16 +3,6 @@ import * as THREE from 'three';
 const $ = id => document.getElementById(id);
 const ARENA = 38;
 
-// aggro 0→1 across fights: longer idle early, shorter late; windMul stretches telegraphs early
-const DRAGONS = [
-  { name: '火龍 雄火龍', body: 0xb3261e, belly: 0xe0a060, accent: 0x2a1a10, pattern: 'spots', horns: 'back', tail: 'club', breath: 'fire', hp: 700, dmg: 1.0, speed: 1.0, aggro: 0.35, windMul: 1.7 },
-  { name: '角龍 黑角龍', body: 0xc8a46a, belly: 0xe8d6a8, accent: 0x5a4020, pattern: 'none', horns: 'huge', tail: 'mace', breath: 'sand', hp: 900, dmg: 1.15, speed: 1.05, aggro: 0.5, windMul: 1.5 },
-  { name: '雷狼龍', body: 0x2d4f8a, belly: 0xe8d040, accent: 0xffe050, pattern: 'bands', horns: 'swept', tail: 'blade', breath: 'thunder', hp: 1100, dmg: 1.25, speed: 1.1, aggro: 0.65, windMul: 1.35 },
-  { name: '轟龍', body: 0xe0b030, belly: 0xf0e0b0, accent: 0x2050a0, pattern: 'stripes', horns: 'stub', tail: 'spike', breath: 'roar', hp: 1300, dmg: 1.4, speed: 1.15, aggro: 0.8, windMul: 1.2 },
-  { name: '黑龍 （終戰）', body: 0x15151a, belly: 0x3a2a30, accent: 0xa01020, pattern: 'veins', horns: 'crown', tail: 'long', breath: 'hellfire', hp: 2000, dmg: 1.6, speed: 1.2, aggro: 1.0, windMul: 1.05 },
-];
-const BREATH_COL = { fire: 0xff6020, sand: 0xd8c090, thunder: 0x80c0ff, roar: 0xffffff, hellfire: 0xff1030 };
-
 const WEAPONS = {
   gs: { name: '大劍', dmg: 42, cd: 0.55, range: 4.2, speedMul: 0.85, col: 0xb8bcc4 },
   ss: { name: '單手劍', dmg: 15, cd: 0.18, range: 3.0, speedMul: 1.0, col: 0xc8ced4 },
@@ -279,21 +269,6 @@ for (const o of OBSTACLES) {
 }
 
 
-// ---------- audio ----------
-let actx = null, muted = false;
-function snd(freq, dur = 0.12, type = 'square', vol = 0.15, slide = 0) {
-  if (muted) return;
-  try {
-    actx = actx || new AudioContext();
-    const o = actx.createOscillator(), g = actx.createGain();
-    o.type = type; o.frequency.value = freq;
-    if (slide) o.frequency.exponentialRampToValueAtTime(Math.max(30, freq + slide), actx.currentTime + dur);
-    g.gain.setValueAtTime(vol, actx.currentTime); g.gain.exponentialRampToValueAtTime(0.001, actx.currentTime + dur);
-    o.connect(g).connect(actx.destination); o.start(); o.stop(actx.currentTime + dur);
-  } catch (e) { }
-}
-$('mute').onclick = () => { muted = !muted; $('mute').textContent = muted ? '🔇 靜' : '🔊 聲'; };
-
 // ---------- player ----------
 const player = new THREE.Group();
 const armorMat = std(0x406080), skinMat = std(0xe0b090), leatherMat = std(0x5a3a22), metalMat = std(0x8890a0);
@@ -337,109 +312,345 @@ function buildWeapon(w) {
   if (w === 'db') { armR.add(blade(1.1, 0.14)); armL.add(blade(1.1, 0.14)); }
 }
 
-// ---------- dragon ----------
-let dragon = null;
-function patternTex(d) {
+
+// ---------- colours / elements ----------
+const COLOR_DEFS = {
+  beige: { hex: 0xc4b08a, belly: 0xe4d8c0, accent: 0x8a7a5a, name: '米', elem: null },
+  red:   { hex: 0xa82820, belly: 0xd8a070, accent: 0x5a2018, name: '紅', elem: 'fire' },
+  green: { hex: 0x3a7040, belly: 0xa0b888, accent: 0x204028, name: '綠', elem: 'poison' },
+  blue:  { hex: 0x2a5080, belly: 0x98b8d0, accent: 0x183048, name: '藍', elem: 'lightning' },
+  black: { hex: 0x1c1c24, belly: 0x3a3a48, accent: 0x505060, name: '黑', elem: 'blast' },
+};
+const ELEM_COL = { fire: 0xff6020, poison: 0x60c040, lightning: 0x80c0ff, blast: 0x606070 };
+const PLAYER_H = 2.0;
+
+function playerPower() {
+  const s = run.stats;
+  return 80 + (s.hp + s.atk + s.def + s.sta + s.spd) * 25 + run.fight * 18;
+}
+function estimatePower(def) {
+  let p = 40;
+  if (def.legs === 'quad') p += 28;
+  if (def.horns) p += 22;
+  if (def.wings) p += 32;
+  p += (def.size - 1.5) * 18;
+  def.colors.forEach(c => { if (c !== 'beige') p += 16; });
+  if (def.colors.length > 1) p += 10;
+  p += def.hp / 25 + def.dmg * 40;
+  return p;
+}
+function traitLabel(def) {
+  const parts = [
+    def.legs === 'quad' ? '四足' : '兩足',
+    def.horns ? '有角' : '無角',
+    def.wings ? '有翼' : '無翼',
+    def.colors.map(c => COLOR_DEFS[c].name).join('/'),
+    def.size.toFixed(1) + 'x',
+  ];
+  return parts.join('・');
+}
+function generateDragon(fight, budget, forceBasic = false) {
+  const def = {
+    legs: 'biped', horns: false, wings: false, size: 1.6,
+    colors: ['beige'], hp: 220, dmg: 0.75, speed: 0.95, aggro: 0.35, windMul: 1.6,
+    name: '初生龍', body: COLOR_DEFS.beige.hex, belly: COLOR_DEFS.beige.belly, accent: COLOR_DEFS.beige.accent,
+  };
+  if (forceBasic || fight === 0) {
+    def.size = 1.5 + Math.random() * 0.25;
+    def.hp = 200 + Math.random() * 80;
+    def.dmg = 0.7 + Math.random() * 0.15;
+    def.traits = traitLabel(def);
+    def.power = estimatePower(def);
+    return def;
+  }
+  let spent = 40;
+  const unlock = Math.min(1, fight / 8 + (budget - 80) / 400);
+  // legs
+  if (unlock > 0.15 && Math.random() < 0.35 + unlock * 0.4 && spent + 28 < budget) {
+    def.legs = 'quad'; spent += 28; def.dmg += 0.15; def.speed += 0.05;
+  }
+  // horns
+  if (unlock > 0.25 && Math.random() < 0.3 + unlock * 0.35 && spent + 22 < budget) {
+    def.horns = true; spent += 22; def.dmg += 0.12; def.speed += 0.08;
+  }
+  // wings
+  if (unlock > 0.4 && Math.random() < 0.25 + unlock * 0.3 && spent + 32 < budget) {
+    def.wings = true; spent += 32; def.aggro += 0.1;
+  }
+  // size
+  const maxSize = Math.min(6, 1.6 + unlock * 4.2);
+  def.size = 1.55 + Math.random() * (maxSize - 1.55);
+  spent += (def.size - 1.5) * 18;
+  // colours
+  const pool = ['beige', 'red', 'green', 'blue', 'black'];
+  const unlocked = pool.filter((c, i) => c === 'beige' || unlock > 0.12 * i);
+  def.colors = [unlocked[Math.floor(Math.random() * unlocked.length)] || 'beige'];
+  if (def.colors[0] !== 'beige') spent += 16;
+  if (unlock > 0.55 && Math.random() < 0.4 && spent + 26 < budget) {
+    const other = unlocked.filter(c => c !== def.colors[0] && c !== 'beige');
+    if (other.length) { def.colors.push(other[Math.floor(Math.random() * other.length)]); spent += 26; }
+  }
+  // remaining budget → HP / dmg
+  const rem = Math.max(20, budget - spent);
+  def.hp = 180 + rem * 4.5 + fight * 40;
+  def.dmg = 0.7 + rem / 180 + (def.horns ? 0.15 : 0) + (def.legs === 'quad' ? 0.1 : 0);
+  def.speed = 0.9 + (def.horns ? 0.15 : 0) + unlock * 0.2;
+  def.aggro = Math.min(1, 0.35 + unlock * 0.55);
+  def.windMul = Math.max(1.05, 1.65 - unlock * 0.5);
+  const c0 = COLOR_DEFS[def.colors[0]], c1 = COLOR_DEFS[def.colors[1] || def.colors[0]];
+  def.body = c0.hex; def.belly = c0.belly; def.accent = c1.accent;
+  def.name = (def.wings ? '翼' : '') + (def.horns ? '角' : '') + (def.legs === 'quad' ? '獸' : '龍') + def.colors.map(c => COLOR_DEFS[c].name).join('');
+  def.traits = traitLabel(def);
+  def.power = estimatePower(def);
+  // soft clamp
+  if (def.power > budget * 1.05) {
+    const s = budget / def.power;
+    def.hp *= s; def.dmg *= Math.sqrt(s); def.power = estimatePower(def);
+  }
+  return def;
+}
+function generateEncounter(fight) {
+  const pwr = playerPower();
+  const cap = pwr * 1.2;
+  let count = 1;
+  if (pwr > 260 && fight >= 4 && Math.random() < 0.4) count = 2;
+  if (pwr > 380 && fight >= 7 && Math.random() < 0.25) count = Math.min(3, count + 1);
+  if (fight === 0) count = 1;
+  const defs = [];
+  let left = cap;
+  for (let i = 0; i < count; i++) {
+    const share = left / (count - i) * (0.9 + Math.random() * 0.15);
+    const d = generateDragon(fight, share, fight === 0 && i === 0);
+    defs.push(d);
+    left = Math.max(40, left - d.power);
+  }
+  return defs;
+}
+
+// ---------- audio (richer SFX, mute-aware) ----------
+let actx = null, muted = false;
+function snd(freq, dur = 0.12, type = 'square', vol = 0.15, slide = 0) {
+  if (muted) return;
+  try {
+    actx = actx || new AudioContext();
+    const o = actx.createOscillator(), g = actx.createGain();
+    o.type = type; o.frequency.value = freq;
+    if (slide) o.frequency.exponentialRampToValueAtTime(Math.max(30, freq + slide), actx.currentTime + dur);
+    g.gain.setValueAtTime(vol, actx.currentTime); g.gain.exponentialRampToValueAtTime(0.001, actx.currentTime + dur);
+    o.connect(g).connect(actx.destination); o.start(); o.stop(actx.currentTime + dur);
+  } catch (e) { }
+}
+function noiseBurst(dur, vol, freq = 400) {
+  if (muted) return;
+  try {
+    actx = actx || new AudioContext();
+    const n = actx.createBuffer(1, actx.sampleRate * dur, actx.sampleRate);
+    const d = n.getChannelData(0);
+    for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * Math.exp(-i / d.length * 5);
+    const src = actx.createBufferSource(), f = actx.createBiquadFilter(), g = actx.createGain();
+    f.type = 'bandpass'; f.frequency.value = freq;
+    g.gain.value = vol;
+    src.buffer = n; src.connect(f).connect(g).connect(actx.destination); src.start();
+  } catch (e) { }
+}
+const SFX = {
+  slash: () => snd(280, 0.08, 'square', 0.1, 200),
+  hit: () => { snd(160, 0.09, 'square', 0.12); noiseBurst(0.05, 0.08, 300); },
+  roll: () => snd(500, 0.08, 'triangle', 0.06, -200),
+  roar: () => { snd(70, 0.55, 'sawtooth', 0.18, -30); snd(90, 0.4, 'square', 0.08, 40); },
+  stomp: () => { snd(55, 0.15, 'sine', 0.16, -20); noiseBurst(0.08, 0.1, 120); },
+  flap: () => snd(180, 0.12, 'triangle', 0.05, -80),
+  fire: () => { snd(220, 0.25, 'sawtooth', 0.12, 120); noiseBurst(0.2, 0.1, 600); },
+  poison: () => snd(340, 0.2, 'triangle', 0.1, -60),
+  lightning: () => { snd(900, 0.08, 'square', 0.12); snd(600, 0.15, 'sawtooth', 0.08, -400); },
+  blast: () => { noiseBurst(0.3, 0.16, 200); snd(80, 0.3, 'sawtooth', 0.14, -40); },
+  poisonTick: () => snd(420, 0.06, 'sine', 0.05),
+  potion: () => snd(700, 0.3, 'sine', 0.1, 300),
+  win: () => { snd(440, 0.15, 'square', 0.1); setTimeout(() => snd(660, 0.2, 'square', 0.1), 120); },
+  lose: () => snd(120, 0.6, 'sawtooth', 0.14, -80),
+  foot: () => snd(90, 0.05, 'triangle', 0.04),
+};
+$('mute').onclick = () => { muted = !muted; $('mute').textContent = muted ? '🔇 靜' : '🔊 聲'; };
+
+
+// ---------- procedural dragon mesh ----------
+let dragons = []; // active fight dragons
+let titleDragon = null;
+
+function patternTex(def) {
   const c = n => '#' + n.toString(16).padStart(6, '0');
-  // quieter low-res patterns — fewer marks, softer accent
+  const c0 = COLOR_DEFS[def.colors[0]], c1 = COLOR_DEFS[def.colors[1] || def.colors[0]];
   return canvasTex(24, 24, (g, w, h) => {
-    g.fillStyle = c(d.body); g.fillRect(0, 0, w, h);
-    g.fillStyle = c(d.accent);
-    if (d.pattern === 'stripes') for (let x = 2; x < w; x += 8) g.fillRect(x, 0, 2, h);
-    if (d.pattern === 'bands') for (let x = 3; x < w; x += 10) g.fillRect(x, 0, 1, h);
-    if (d.pattern === 'spots') for (let i = 0; i < 6; i++) g.fillRect(4 + (i % 3) * 7, 4 + Math.floor(i / 3) * 10, 2, 2);
-    if (d.pattern === 'veins') { g.fillRect(8, 2, 1, 10); g.fillRect(14, 8, 1, 12); g.fillRect(4, 14, 8, 1); }
+    g.fillStyle = c(c0.hex); g.fillRect(0, 0, w, h);
+    if (def.colors.length > 1) {
+      g.fillStyle = c(c1.hex);
+      for (let x = 0; x < w; x += 6) g.fillRect(x, 0, 3, h);
+    } else if (def.colors[0] !== 'beige') {
+      g.fillStyle = c(c0.accent);
+      for (let i = 0; i < 5; i++) g.fillRect(4 + (i % 3) * 7, 4 + Math.floor(i / 3) * 10, 2, 2);
+    }
   });
 }
+
 function buildDragon(def) {
   const root = new THREE.Group();
   const skin = new THREE.MeshLambertMaterial({ map: patternTex(def), flatShading: true });
-  const belly = std(def.belly), horn = std(def.horns === 'crown' ? 0x401010 : 0xe8e0c8), dark = std(def.accent);
+  const belly = std(def.belly), hornMat = std(0xe0d8c0), dark = std(def.accent);
   const mk = (geo, mat, x, y, z, parent = root) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); parent.add(m); return m; };
-  const body = mk(new THREE.SphereGeometry(1, 12, 8), skin, 0, 3.2, 0); body.scale.set(2.0, 1.8, 3.4);
-  mk(new THREE.SphereGeometry(1, 10, 8), belly, 0, 2.5, 0.3).scale.set(1.6, 1.2, 2.8);
-  const neck = new THREE.Group(); neck.position.set(0, 4.0, 2.8); root.add(neck);
-  mk(new THREE.CylinderGeometry(0.7, 1.1, 2.8, 12), skin, 0, 0.8, 1.0, neck).rotation.x = 1.0;
-  const head = new THREE.Group(); head.position.set(0, 1.6, 2.4); neck.add(head);
-  mk(new THREE.BoxGeometry(1.3, 1.0, 2.0), skin, 0, 0, 0.4, head);
-  mk(new THREE.BoxGeometry(1.0, 0.5, 1.4), skin, 0, -0.1, 1.7, head);
-  const jaw = mk(new THREE.BoxGeometry(0.95, 0.3, 1.8), dark, 0, -0.55, 1.2, head);
-  [-1, 1].forEach(s => mk(new THREE.SphereGeometry(0.13, 8, 6), std(0xffee40), 0.55 * s, 0.25, 0.9, head));
-  const hornDefs = { back: [[0.4, 0.4, -0.5, 0.15, 1.2, -2.2, 0.3]], huge: [[0.55, 0.3, 0.2, 0.3, 2.6, -0.4, 1.2]], swept: [[0.45, 0.4, -0.3, 0.12, 1.6, -2.6, 0.6], [0.5, 0.0, 0.3, 0.1, 0.9, -1.6, 1.0]], stub: [[0.5, 0.5, -0.2, 0.2, 0.6, -1.2, 0.2]], crown: [[0.3, 0.5, -0.4, 0.15, 1.8, -2.0, 0.2], [0.6, 0.4, -0.2, 0.15, 1.6, -1.8, 0.7], [0.75, 0.2, 0.1, 0.12, 1.2, -1.3, 1.1]] };
-  hornDefs[def.horns].forEach(([x, y, z, r, len, rx, rz]) => [-1, 1].forEach(s => { const h = mk(new THREE.ConeGeometry(r, len, 8), horn, x * s, y + len * 0.3, z, head); h.rotation.set(rx, 0, -rz * s); }));
-  const legs = [];
-  [[-1.4, 1.6], [1.4, 1.6], [-1.5, -1.6], [1.5, -1.6]].forEach(([x, z]) => {
-    const g = new THREE.Group(); g.position.set(x, 2.6, z); root.add(g);
-    mk(new THREE.CylinderGeometry(0.45, 0.35, 2.6, 8), skin, 0, -1.3, 0, g);
-    mk(new THREE.BoxGeometry(0.8, 0.3, 1.0), dark, 0, -2.5, 0.2, g); legs.push(g);
-  });
-  const wings = [];
-  [-1, 1].forEach(s => {
-    const g = new THREE.Group(); g.position.set(1.4 * s, 4.4, 0.8); root.add(g);
-    mk(new THREE.CylinderGeometry(0.15, 0.2, 4.5, 6), dark, 2.2 * s, 0.6, 0, g).rotation.z = -1.2 * s;
-    const mem = mk(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, 0, 0), new THREE.Vector3(4.3 * s, 1.5, 0), new THREE.Vector3(3.5 * s, -1.2, -3.5)]), new THREE.MeshLambertMaterial({ color: def.belly, side: THREE.DoubleSide, transparent: true, opacity: 0.9, flatShading: true }), 0, 0, 0, g);
-    mem.geometry.computeVertexNormals(); wings.push(g);
-  });
-  // tail: chain of segments in a group that can be severed at `tailCut`
-  const tailBase = new THREE.Group(); tailBase.position.set(0, 3.4, -3.0); root.add(tailBase);
-  const segs = def.tail === 'long' ? 7 : 5;
-  let parent = tailBase; const tailSegs = []; let tailCut = null;
-  for (let i = 0; i < segs; i++) {
-    const g = new THREE.Group(); g.position.z = i === 0 ? 0 : -1.5; parent.add(g);
-    const r = 0.8 * (1 - i / (segs + 1));
-    mk(new THREE.CylinderGeometry(r * 0.8, r, 1.7, 10), skin, 0, 0, -0.75, g).rotation.x = Math.PI / 2;
-    tailSegs.push(g); parent = g;
-    if (i === 1) tailCut = g;
+  const biped = def.legs === 'biped';
+  // body
+  const bodyY = biped ? 3.6 : 2.8;
+  const body = mk(new THREE.SphereGeometry(1, 10, 8), skin, 0, bodyY, 0);
+  body.scale.set(biped ? 1.6 : 2.0, biped ? 2.2 : 1.6, biped ? 2.2 : 3.2);
+  mk(new THREE.SphereGeometry(1, 8, 6), belly, 0, bodyY - 0.5, biped ? 0.2 : 0.3).scale.set(biped ? 1.2 : 1.5, biped ? 1.4 : 1.1, biped ? 1.6 : 2.6);
+  // neck + head
+  const neck = new THREE.Group(); neck.position.set(0, bodyY + (biped ? 1.2 : 0.9), biped ? 1.4 : 2.4); root.add(neck);
+  mk(new THREE.CylinderGeometry(0.55, 0.9, biped ? 2.0 : 2.4, 8), skin, 0, 0.6, biped ? 0.5 : 0.9, neck).rotation.x = biped ? 0.6 : 1.0;
+  const head = new THREE.Group(); head.position.set(0, biped ? 1.4 : 1.5, biped ? 1.5 : 2.2); neck.add(head);
+  mk(new THREE.BoxGeometry(1.2, 0.95, 1.7), skin, 0, 0, 0.3, head);
+  mk(new THREE.BoxGeometry(0.9, 0.45, 1.2), skin, 0, -0.1, 1.4, head);
+  const jaw = mk(new THREE.BoxGeometry(0.85, 0.28, 1.4), dark, 0, -0.5, 1.0, head);
+  [-1, 1].forEach(s => mk(new THREE.SphereGeometry(0.12, 6, 5), std(0xffee40), 0.45 * s, 0.2, 0.7, head));
+  if (def.horns) {
+    [[0.4, 0.45, -0.2, 0.18, 1.4, -0.8, 0.5], [0.55, 0.3, 0.1, 0.12, 0.9, -0.3, 0.9]].forEach(([x, y, z, r, len, rx, rz]) => {
+      [-1, 1].forEach(s => { const h = mk(new THREE.ConeGeometry(r, len, 6), hornMat, x * s, y + len * 0.25, z, head); h.rotation.set(rx, 0, -rz * s); });
+    });
   }
-  const tip = parent;
-  if (def.tail === 'club') mk(new THREE.SphereGeometry(0.7, 10, 8), dark, 0, 0, -1.7, tip);
-  if (def.tail === 'mace') { const s = mk(new THREE.SphereGeometry(0.8, 10, 8), horn, 0, 0, -1.8, tip); for (let k = 0; k < 6; k++) { const sp = mk(new THREE.ConeGeometry(0.2, 0.8, 6), horn, 0, 0, 0, s); sp.rotation.set(Math.random() * 6, Math.random() * 6, 0); sp.translateY(0.8); } }
-  if (def.tail === 'blade') { const b = mk(new THREE.BoxGeometry(0.15, 1.2, 2.2), std(0xffe050), 0, 0.3, -1.9, tip); b.rotation.x = 0.2; }
-  if (def.tail === 'spike') for (let k = 0; k < 3; k++) { const sp = mk(new THREE.ConeGeometry(0.2, 0.9, 6), horn, 0, 0.4, -0.5 - k * 0.5, tip); sp.rotation.x = -0.6; }
-  if (def.tail === 'long') mk(new THREE.ConeGeometry(0.4, 1.8, 8), dark, 0, 0, -2, tip).rotation.x = -Math.PI / 2;
-  // back spines
-  for (let k = 0; k < 6; k++) mk(new THREE.ConeGeometry(0.22, 0.9, 6), dark, 0, 5.1 - Math.abs(k - 2) * 0.1, 1.8 - k * 0.8);
-  root.scale.setScalar(def.horns === 'crown' ? 1.15 : 1);
+  // legs
+  const legs = [];
+  if (biped) {
+    [[-0.55, 0.3], [0.55, 0.3]].forEach(([x, z]) => {
+      const g = new THREE.Group(); g.position.set(x, bodyY - 0.4, z); root.add(g);
+      mk(new THREE.CylinderGeometry(0.38, 0.32, 2.2, 6), skin, 0, -1.1, 0, g);
+      mk(new THREE.BoxGeometry(0.7, 0.28, 1.0), dark, 0, -2.2, 0.15, g); legs.push(g);
+    });
+  } else {
+    [[-1.3, 1.4], [1.3, 1.4], [-1.4, -1.5], [1.4, -1.5]].forEach(([x, z]) => {
+      const g = new THREE.Group(); g.position.set(x, bodyY - 0.2, z); root.add(g);
+      mk(new THREE.CylinderGeometry(0.4, 0.32, 2.2, 6), skin, 0, -1.1, 0, g);
+      mk(new THREE.BoxGeometry(0.7, 0.25, 0.9), dark, 0, -2.2, 0.15, g); legs.push(g);
+    });
+  }
+  // wings
+  const wings = [];
+  if (def.wings) {
+    [-1, 1].forEach(s => {
+      const g = new THREE.Group(); g.position.set(1.2 * s, bodyY + 0.8, 0.4); root.add(g);
+      mk(new THREE.CylinderGeometry(0.12, 0.16, 3.8, 5), dark, 1.8 * s, 0.5, 0, g).rotation.z = -1.15 * s;
+      const wgeo = new THREE.BufferGeometry();
+      wgeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array([
+        0, 0, 0, 3.6 * s, 1.2, 0, 2.8 * s, -0.9, -2.8,
+      ]), 3));
+      wgeo.setIndex([0, 1, 2]);
+      wgeo.computeVertexNormals();
+      mk(wgeo, new THREE.MeshLambertMaterial({ color: def.belly, side: THREE.DoubleSide, transparent: true, opacity: 0.85, flatShading: true }), 0, 0, 0, g);
+      wings.push(g);
+    });
+  }
+  // tail
+  const tailBase = new THREE.Group(); tailBase.position.set(0, bodyY - 0.2, biped ? -1.6 : -2.8); root.add(tailBase);
+  let parent = tailBase; const tailSegs = []; let tailCut = null;
+  const segs = 5;
+  for (let i = 0; i < segs; i++) {
+    const g = new THREE.Group(); g.position.z = i === 0 ? 0 : -1.35; parent.add(g);
+    const r = 0.7 * (1 - i / (segs + 1));
+    mk(new THREE.CylinderGeometry(r * 0.75, r, 1.5, 8), skin, 0, 0, -0.7, g).rotation.x = Math.PI / 2;
+    tailSegs.push(g); parent = g; if (i === 1) tailCut = g;
+  }
+  mk(new THREE.SphereGeometry(0.55, 8, 6), dark, 0, 0, -1.5, parent);
+  for (let k = 0; k < 4; k++) mk(new THREE.ConeGeometry(0.18, 0.7, 5), dark, 0, bodyY + 1.4 - Math.abs(k - 1.5) * 0.1, 0.6 - k * 0.7);
+
+  // scale: size is multiple of player height; base mesh ~6 units tall
+  const scale = (def.size * PLAYER_H) / 6;
+  root.scale.setScalar(scale);
   scene.add(root);
-  return { root, head, neck, jaw, legs, wings, tailBase, tailSegs, tailCut, tip };
+  return {
+    def, root, head, neck, jaw, legs, wings, tailBase, tailSegs, tailCut,
+    scale, bodyR: 2.8 * scale, headR: 1.4 * scale, flyY: 0,
+    hp: def.hp, maxHp: def.hp, tailHp: def.hp * 0.22, severed: false, flinch: 0,
+    ai: { state: 'idle', t: 1.8 + Math.random(), atk: null, dir: new THREE.Vector3(), hit: false, lastAtk: '', phase: 0 },
+  };
 }
 
-// ---------- fight state ----------
-let S = null; // per-fight state
+function clearDragons() {
+  dragons.forEach(d => { if (d.root.parent) scene.remove(d.root); });
+  dragons = [];
+  if (titleDragon) { scene.remove(titleDragon.root); titleDragon = null; }
+}
+
+function livingDragons() { return dragons.filter(d => d.hp > 0); }
+function nearestDragon() {
+  let best = null, bd = 1e9;
+  for (const d of livingDragons()) {
+    const dist = flatDist(player.position, d.root.position);
+    if (dist < bd) { bd = dist; best = d; }
+  }
+  return best;
+}
+
+// ---------- fight flow ----------
+let S = null;
+let pendingDefs = null;
 const keys = {}; let camYaw = 0, camPitch = 0.35;
 const input = { mx: 0, mz: 0, attack: false, special: false, dodge: false, potion: false };
 const effects = [];
+let projectiles = [];
 
 function pStats() {
   const s = run.stats;
-  // ~1.8× former base speed so walk/run feel responsive on phone
   return { maxHp: 100 + s.hp * 20, atk: 1 + s.atk * 0.1, def: Math.pow(0.92, s.def), maxSt: 100 + s.sta * 20, spd: 13.5 * (1 + s.spd * 0.06) };
 }
 
-function startFight() {
-  if (dragon) scene.remove(dragon.root);
-  effects.splice(0).forEach(e => scene.remove(e.obj));
-  scene.children.filter(o => o.userData.severed).forEach(o => scene.remove(o));
-  const def = DRAGONS[run.fight], ps = pStats();
-  dragon = buildDragon(def);
-  buildWeapon(run.weapon);
-  dragon.root.position.set(0, sampleHeight(0, 18), 18); dragon.root.rotation.y = Math.PI;
-  player.position.set(0, sampleHeight(0, -16), -16); player.rotation.y = 0; camYaw = 0;
-  S = {
-    def, ps, hp: ps.maxHp, st: ps.maxSt, potions: 3, cd: 0, swing: 0, swingDur: 0, charge: -1, block: false, dodgeT: 0, invuln: 0, drinkT: 0, hurtT: 0,
-    combo: 0, comboStep: 0, atkBuf: false, comboWin: 0, comboId: '',
-    dhp: def.hp, dmax: def.hp, tailHp: def.hp * 0.22, severed: false,
-    ai: { state: 'idle', t: 2.4 + (1 - def.aggro) * 1.2, atk: null, dir: new THREE.Vector3(), hit: false, lastAtk: '' }, over: false, introT: 2.2,
-  };
-  $('dname').textContent = `第${run.fight + 1}戰：${def.name}`;
-  $('pname').textContent = `獵人（${WEAPONS[run.weapon].name}）`;
-  showMsg(`第${run.fight + 1}戰\n${def.name}`, 2);
+function showPreview(defs) {
+  pendingDefs = defs;
+  $('ptitle').textContent = defs.length > 1 ? `第${run.fight + 1}戰 · ${defs.length} 隻龍` : `第${run.fight + 1}戰`;
+  $('pcard').innerHTML = defs.map((d, i) =>
+    `<div style="margin:10px 0;padding:10px 14px;border:2px solid #fff4;border-radius:12px;background:#0006">
+      <b>${defs.length > 1 ? (i + 1) + '. ' : ''}${d.name}</b><br>${d.traits}<br>
+      <span style="opacity:.8">體力 ${Math.round(d.hp)} · 攻擊 ×${d.dmg.toFixed(2)}</span>
+    </div>`
+  ).join('');
   ['title', 'stats', 'over'].forEach(id => $(id).classList.add('hidden'));
+  $('preview').classList.remove('hidden');
   $('help')?.classList.add('hidden');
+}
+
+function startFight(defs) {
+  clearDragons();
+  effects.splice(0).forEach(e => scene.remove(e.obj));
+  projectiles.splice(0).forEach(p => scene.remove(p.mesh));
+  scene.children.filter(o => o.userData.severed).forEach(o => scene.remove(o));
+  const list = defs || pendingDefs || generateEncounter(run.fight);
+  pendingDefs = null;
+  buildWeapon(run.weapon);
+  const ps = pStats();
+  const slots = list.length === 1 ? [[0, 18]] : list.length === 2 ? [[-10, 16], [10, 16]] : [[0, 18], [-12, 12], [12, 12]];
+  dragons = list.map((def, i) => {
+    const d = buildDragon(def);
+    const [x, z] = slots[i] || [0, 18];
+    d.root.position.set(x, sampleHeight(x, z), z);
+    d.root.rotation.y = Math.PI;
+    return d;
+  });
+  player.position.set(0, sampleHeight(0, -16), -16); player.rotation.y = 0; camYaw = 0;
+  const primary = dragons[0];
+  S = {
+    ps, hp: ps.maxHp, st: ps.maxSt, potions: 3, cd: 0, swing: 0, swingDur: 0, charge: -1, block: false, dodgeT: 0, invuln: 0, drinkT: 0, hurtT: 0,
+    combo: 0, comboStep: 0, atkBuf: false, comboWin: 0, comboId: '',
+    debuffs: { poison: 0, slow: 0, dark: 0 }, camShake: 0, over: false, introT: 2.0, winPending: false,
+  };
+  $('dname').textContent = list.length > 1 ? `第${run.fight + 1}戰：${list.length} 龍` : `第${run.fight + 1}戰：${primary.def.name}`;
+  $('dtraits').textContent = list.length > 1 ? list.map(d => d.traits).join(' ｜ ') : primary.def.traits;
+  $('pname').textContent = `獵人（${WEAPONS[run.weapon].name}）`;
+  showMsg(list.length > 1 ? `第${run.fight + 1}戰\n${list.length} 隻龍` : `第${run.fight + 1}戰\n${primary.def.name}`, 2);
+  ['title', 'stats', 'over', 'preview'].forEach(id => $(id).classList.add('hidden'));
+  $('help')?.classList.add('hidden');
+  SFX.roar();
 }
 
 let msgT = 0;
 function showMsg(t, d = 1.5) { $('msg').innerText = t; msgT = d; }
+
 
 // ---------- input ----------
 const pad = { mx: 0, mz: 0, attack: false, special: false, connected: false, id: '', lookX: 0, lookY: 0 };
@@ -469,8 +680,9 @@ addEventListener('pointermove', e => {
     drag.x = e.clientX; drag.y = e.clientY;
   }
 });
-// touch: always show on coarse/touch devices; gamepad can be used at the same time
-const isTouch = matchMedia('(pointer:coarse)').matches || 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+// touch: show on coarse/touch / no-hover devices; gamepad can be used at the same time
+const isTouch = matchMedia('(pointer:coarse)').matches || matchMedia('(hover: none)').matches
+  || 'ontouchstart' in window || (navigator.maxTouchPoints || 0) > 0;
 if (isTouch) $('touch').classList.remove('hidden');
 const stick = $('stick'), knob = $('knob'); let stickId = null;
 function stickMove(e) {
@@ -567,17 +779,35 @@ function pollGamepad(dt) {
   }
   // Options → restart to title; Share → mute
   const optNow = gpBtn(gp, 9);
-  if (optNow && !padPrev.options) { S = null; ['stats', 'over'].forEach(id => $(id).classList.add('hidden')); $('title').classList.remove('hidden'); $('help')?.classList.remove('hidden'); }
+  if (optNow && !padPrev.options) goTitle();
   padPrev.options = optNow;
   const shareNow = gpBtn(gp, 8);
   if (shareNow && !padPrev.share) { muted = !muted; $('mute').textContent = muted ? '🔇 靜' : '🔊 聲'; }
   padPrev.share = shareNow;
 }
 
+
 // ---------- UI panels ----------
-document.querySelectorAll('#title button').forEach(b => b.onclick = () => { run.weapon = b.dataset.w; run.fight = 0; run.pts = 0; for (const k in run.stats) run.stats[k] = 0; snd(440); startFight(); });
-$('restart').onclick = () => { S = null; ['stats', 'over'].forEach(id => $(id).classList.add('hidden')); $('title').classList.remove('hidden'); $('help')?.classList.remove('hidden'); };
-$('oagain').onclick = () => startFight();
+function spawnTitleDragon() {
+  if (titleDragon) { scene.remove(titleDragon.root); titleDragon = null; }
+  titleDragon = buildDragon(generateDragon(0, 80, true));
+  titleDragon.root.position.set(0, sampleHeight(0, 10), 10);
+}
+function goTitle() {
+  S = null; clearDragons(); pendingDefs = null;
+  ['stats', 'over', 'preview'].forEach(id => $(id).classList.add('hidden'));
+  $('title').classList.remove('hidden');
+  $('help')?.classList.remove('hidden');
+  spawnTitleDragon();
+}
+document.querySelectorAll('#title button').forEach(b => b.onclick = () => {
+  run.weapon = b.dataset.w; run.fight = 0; run.pts = 0;
+  for (const k in run.stats) run.stats[k] = 0;
+  snd(440); showPreview(generateEncounter(0));
+});
+$('pgo').onclick = () => { snd(520, 0.1, 'square', 0.08); startFight(pendingDefs || generateEncounter(run.fight)); };
+$('restart').onclick = () => goTitle();
+$('oagain').onclick = () => { $('over').classList.add('hidden'); showPreview(generateEncounter(run.fight)); };
 function showStats() {
   $('stats').classList.remove('hidden');
   const render = () => {
@@ -595,200 +825,390 @@ function showStats() {
   run.base = { ...run.stats };
   render();
 }
-$('snext').onclick = () => { run.fight++; startFight(); };
+$('snext').onclick = () => {
+  run.fight++;
+  $('stats').classList.add('hidden');
+  showPreview(generateEncounter(run.fight));
+};
+
 
 // ---------- combat helpers ----------
 const tmp = new THREE.Vector3(), tmp2 = new THREE.Vector3();
 function worldPos(o, v = new THREE.Vector3()) { return o.getWorldPosition(v); }
 function flatDist(a, b) { return Math.hypot(a.x - b.x, a.z - b.z); }
 
-function hurtPlayer(amount, src) {
-  if (S.invuln > 0 || S.over) return;
-  let dmg = amount * S.def.dmg * S.ps.def * (S.severed ? 0.75 : 1);
+function hurtPlayer(amount, src, opts = {}) {
+  if (!S || S.invuln > 0 || S.over) return;
+  const d = nearestDragon();
+  const dmgMul = d ? d.def.dmg : 1;
+  let dmg = amount * dmgMul * S.ps.def * (d && d.severed ? 0.75 : 1);
   const toSrc = Math.atan2(src.x - player.position.x, src.z - player.position.z);
   const facing = Math.abs(((toSrc - player.rotation.y + Math.PI * 3) % (Math.PI * 2)) - Math.PI) < 1.2;
   if (S.block && facing && S.st > 0) { dmg *= 0.15; S.st -= 20; snd(900, 0.08, 'triangle'); showMsg('格擋！', 0.6); }
-  else { snd(120, 0.2, 'sawtooth', 0.2, -60); S.hurtT = 0.4; }
-  S.hp -= dmg; S.invuln = 0.6; S.drinkT = 0;
-  const away = tmp.copy(player.position).sub(src).setY(0).normalize().multiplyScalar(dmg > 10 ? 3 : 1);
-  player.position.add(away);
-  if (S.hp <= 0) { S.hp = 0; S.over = true; setTimeout(() => { $('otitle').textContent = '狩獵失敗'; $('otext').textContent = `${S.def.name} 太強喇…`; $('over').classList.remove('hidden'); }, 1200); }
+  else { SFX.hit(); S.hurtT = 0.4; }
+  S.hp -= dmg; S.invuln = 0.55; S.drinkT = 0;
+  if (opts.poison) S.debuffs.poison = Math.max(S.debuffs.poison, 5);
+  if (opts.slow) S.debuffs.slow = Math.max(S.debuffs.slow, 4);
+  if (opts.dark) { S.debuffs.dark = Math.max(S.debuffs.dark, 3.5); S.camShake = Math.max(S.camShake, 0.45); SFX.blast(); }
+  const away = tmp.copy(player.position).sub(src).setY(0);
+  if (away.lengthSq() > 0.01) { away.normalize().multiplyScalar(dmg > 10 ? 2.5 : 1); player.position.add(away); }
+  if (S.hp <= 0) {
+    S.hp = 0; S.over = true; SFX.lose();
+    setTimeout(() => { $('otitle').textContent = '狩獵失敗'; $('otext').textContent = '龍太強喇…'; $('over').classList.remove('hidden'); }, 1000);
+  }
 }
 
 function doHit(mult, label, rangeMul = 1) {
   const w = WEAPONS[run.weapon];
   const reach = (rangeMul || 1) * w.range;
   const front = tmp.set(Math.sin(player.rotation.y), 0, Math.cos(player.rotation.y));
-  const hitPt = tmp2.copy(player.position).addScaledVector(front, reach * 0.6);
+  const hitPt = tmp2.copy(player.position).addScaledVector(front, reach * 0.55);
   hitPt.y = 0;
-  // candidate parts: body, head, tail
-  const parts = [
-    { kind: 'body', p: worldPos(dragon.root).setY(0), r: 3.4 },
-    { kind: 'head', p: worldPos(dragon.head).setY(0), r: 1.8 },
-  ];
-  if (!S.severed) dragon.tailSegs.slice(1).forEach(s => parts.push({ kind: 'tail', p: worldPos(s).setY(0), r: 1.4 }));
-  let best = null, bd = 1e9;
-  for (const c of parts) { const d = flatDist(hitPt, c.p) - c.r; if (d < bd) { bd = d; best = c; } }
-  if (!best || bd > reach * 0.6) { snd(300, 0.05, 'triangle', 0.05); return; }
-  let dmg = w.dmg * mult * S.ps.atk * (best.kind === 'head' ? 1.4 : 1);
-  S.dhp -= dmg;
-  spawnSpark(best.p.clone().setY(player.position.y + 2.2), best.kind === 'tail' ? 0xe8d090 : 0xc05050);
-  snd(best.kind === 'head' ? 220 : 180, 0.08, 'square', 0.1);
-  if (label) showMsg(label, 0.55);
-  if (best.kind === 'tail') {
-    S.tailHp -= dmg;
-    if (S.tailHp <= 0) severTail();
+  let best = null, bd = 1e9, bestD = null;
+  for (const d of livingDragons()) {
+    if (d.ai.state === 'fly' || d.ai.state === 'dive') continue; // aerial — harder to hit unless dive
+    const parts = [
+      { kind: 'body', p: worldPos(d.root).setY(0), r: d.bodyR },
+      { kind: 'head', p: worldPos(d.head).setY(0), r: d.headR },
+    ];
+    if (!d.severed) d.tailSegs.slice(1).forEach(s => parts.push({ kind: 'tail', p: worldPos(s).setY(0), r: 1.1 * d.scale }));
+    for (const c of parts) {
+      const dist = flatDist(hitPt, c.p) - c.r;
+      if (dist < bd) { bd = dist; best = c; bestD = d; }
+    }
   }
-  if (S.dhp <= 0 && !S.over) {
-    S.dhp = 0; S.over = true; S.ai.state = 'dead'; snd(200, 1.0, 'sawtooth', 0.2, -150);
-    showMsg('狩獵成功！', 3);
-    setTimeout(() => {
-      if (run.fight >= DRAGONS.length - 1) { $('otitle').textContent = '🏆 全部討伐！'; $('otext').textContent = '你係鬥技場最強獵人！'; $('oagain').textContent = '再挑戰終戰'; $('over').classList.remove('hidden'); }
-      else { run.pts += 5; $('stitle').textContent = `勝利！下一戰：${DRAGONS[run.fight + 1].name}`; showStats(); }
-    }, 2500);
+  // winged diving can be hit
+  for (const d of livingDragons()) {
+    if (d.ai.state !== 'dive') continue;
+    const p = worldPos(d.root).setY(0);
+    const dist = flatDist(hitPt, p) - d.bodyR;
+    if (dist < bd) { bd = dist; best = { kind: 'body', p }; bestD = d; }
+  }
+  if (!best || !bestD || bd > reach * 0.55) { snd(300, 0.05, 'triangle', 0.05); return; }
+  let dmg = w.dmg * mult * S.ps.atk * (best.kind === 'head' ? 1.35 : 1);
+  bestD.hp -= dmg;
+  if (mult >= 1.4) bestD.flinch = 0.35;
+  spawnSpark(best.p.clone().setY(player.position.y + 2.2), best.kind === 'tail' ? 0xe8d090 : 0xc05050);
+  SFX.hit();
+  if (label) showMsg(label, 0.5);
+  if (best.kind === 'tail') {
+    bestD.tailHp -= dmg;
+    if (bestD.tailHp <= 0 && !bestD.severed) severTail(bestD);
+  }
+  if (bestD.hp <= 0) {
+    bestD.hp = 0; bestD.ai.state = 'dead'; bestD.ai.t = 2;
+    SFX.roar();
+    if (livingDragons().length === 0 && !S.over) {
+      S.over = true; S.winPending = true; SFX.win();
+      showMsg('狩獵成功！', 2.5);
+      setTimeout(() => {
+        run.pts += 5 + (dragons.length > 1 ? 3 : 0);
+        $('stitle').textContent = `勝利！`;
+        showStats();
+      }, 1800);
+    }
   }
 }
 
-function severTail() {
-  S.severed = true;
-  const cut = dragon.tailCut;
+function severTail(d) {
+  d.severed = true;
+  const cut = d.tailCut;
+  if (!cut || !cut.parent) return;
   const wp = worldPos(cut), wq = cut.getWorldQuaternion(new THREE.Quaternion()), ws = cut.getWorldScale(new THREE.Vector3());
   cut.parent.remove(cut);
   cut.position.copy(wp); cut.quaternion.copy(wq); cut.scale.copy(ws);
-  cut.userData.severed = true; cut.userData.vy = 4; cut.userData.spin = (Math.random() - 0.5) * 4;
+  cut.userData.severed = true; cut.userData.vy = 4; cut.userData.spin = (Math.random() - .5) * 4;
   scene.add(cut);
-  showMsg('斷尾成功！龍攻擊力下降', 2.2);
-  snd(600, 0.4, 'sawtooth', 0.2, -400);
-  for (let i = 0; i < 2; i++) spawnSpark(wp.clone(), 0x8a3030);
+  showMsg('斷尾！', 1.6);
+  SFX.hit();
+  spawnSpark(wp.clone(), 0x8a3030);
 }
 
 function spawnSpark(p, col) {
-  if (effects.length > 10) return; // keep scene calm
+  if (effects.length > 12) return;
   const m = new THREE.Mesh(new THREE.SphereGeometry(0.22, 4, 3), new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.7 }));
   m.position.copy(p); scene.add(m);
   effects.push({ obj: m, t: 0.28, v: new THREE.Vector3((Math.random() - .5) * 4, Math.random() * 3, (Math.random() - .5) * 4) });
 }
-function spawnBreath(origin, dir, col) {
-  if (effects.length > 14) return;
-  const m = new THREE.Mesh(new THREE.SphereGeometry(0.5, 5, 4), new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.55 }));
-  m.position.copy(origin); scene.add(m);
-  effects.push({ obj: m, t: 0.7, v: dir.clone().multiplyScalar(22).add(new THREE.Vector3((Math.random() - .5) * 1.5, (Math.random() - .5), (Math.random() - .5) * 1.5)), grow: true });
+
+function spawnProjectile(origin, dir, kind, dmg) {
+  const col = ELEM_COL[kind] || 0xffffff;
+  const mesh = new THREE.Mesh(new THREE.SphereGeometry(kind === 'blast' ? 0.7 : 0.45, 6, 5), new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.75 }));
+  mesh.position.copy(origin); scene.add(mesh);
+  projectiles.push({ mesh, v: dir.clone().normalize().multiplyScalar(kind === 'blast' ? 16 : 20), t: 1.4, kind, dmg, hit: false });
+  if (kind === 'fire') SFX.fire();
+  else if (kind === 'poison') SFX.poison();
+  else if (kind === 'lightning') SFX.lightning();
+  else if (kind === 'blast') SFX.blast();
 }
 
 // ---------- dragon AI ----------
-const ATTACKS = {
-  bite:   { name: '咬！', wind: 1.35, act: 0.4, rec: 1.15, range: 9 },
-  tail:   { name: '甩尾！', wind: 1.5, act: 0.75, rec: 1.25, range: 10 },
-  charge: { name: '衝撞！', wind: 1.7, act: 1.35, rec: 1.55, range: 40 },
-  breath: { name: '吐息！', wind: 1.85, act: 1.15, rec: 1.45, range: 22 },
+const ATK = {
+  bite:    { name: '咬！', wind: 1.2, act: 0.38, rec: 1.0, range: 8 },
+  slamL:   { name: '左撞！', wind: 1.3, act: 0.5, rec: 1.1, range: 7 },
+  slamR:   { name: '右撞！', wind: 1.3, act: 0.5, rec: 1.1, range: 7 },
+  tail:    { name: '甩尾！', wind: 1.4, act: 0.7, rec: 1.2, range: 10 },
+  charge:  { name: '衝撞！', wind: 1.55, act: 1.25, rec: 1.45, range: 40 },
+  breath:  { name: '吐息！', wind: 1.6, act: 1.0, rec: 1.3, range: 22 },
+  takeoff: { name: '起飛！', wind: 0.9, act: 0.8, rec: 0.4, range: 99 },
+  dive:    { name: '俯衝！', wind: 1.2, act: 1.1, rec: 1.2, range: 99 },
 };
-function idleCooldown(def) {
-  // 1.5–3s+ between attacks; early dragons linger, late ones press harder
-  const lo = 1.5 + (1 - def.aggro) * 1.2;
-  const hi = 2.2 + (1 - def.aggro) * 1.4;
+
+function idleCd(def) {
+  const lo = 1.4 + (1 - def.aggro) * 1.1;
+  const hi = 2.1 + (1 - def.aggro) * 1.3;
   return lo + Math.random() * (hi - lo);
 }
-function pickAttack(def, dist, behind, lastAtk) {
-  // Distance-driven, low randomness; avoid repeating the same move
+
+function pickAtk(d, dist, ang) {
+  const def = d.def;
+  const behind = Math.abs(ang) > 1.7;
+  const side = Math.abs(ang) > 0.9 && Math.abs(ang) < 1.7;
+  const elems = def.colors.map(c => COLOR_DEFS[c].elem).filter(Boolean);
   let pick;
-  if (behind && dist < 12) pick = 'tail';
-  else if (dist < 7.5) pick = def.aggro < 0.55 ? 'bite' : (Math.random() < 0.7 ? 'bite' : 'tail');
-  else if (dist < 14) {
-    if (def.aggro < 0.45) pick = 'bite';
-    else if (def.aggro < 0.7) pick = Math.random() < 0.65 ? 'breath' : 'bite';
-    else pick = Math.random() < 0.55 ? 'breath' : (Math.random() < 0.5 ? 'charge' : 'bite');
-  } else if (dist < 22) {
-    pick = def.aggro < 0.5 ? (Math.random() < 0.7 ? 'breath' : 'charge') : (Math.random() < 0.45 ? 'breath' : 'charge');
-  } else pick = 'charge';
-  if (pick === lastAtk) {
-    if (pick === 'bite') pick = dist < 10 ? 'tail' : 'breath';
-    else if (pick === 'breath') pick = dist > 12 ? 'charge' : 'bite';
-    else if (pick === 'charge') pick = 'breath';
-    else pick = 'bite';
+  if (def.legs === 'biped') {
+    if (behind && dist < 11) pick = 'tail';
+    else if (side && dist < 8) pick = ang > 0 ? 'slamR' : 'slamL';
+    else if (dist < 7) pick = 'bite';
+    else if (elems.length && dist < 18 && Math.random() < 0.45) pick = 'breath';
+    else if (dist < 10) pick = Math.random() < 0.5 ? 'bite' : (ang > 0 ? 'slamR' : 'slamL');
+    else pick = elems.length ? 'breath' : 'bite';
+  } else {
+    if (behind && dist < 12) pick = 'tail';
+    else if (dist < 8 && Math.random() < 0.35) pick = 'tail';
+    else if (elems.length && dist > 8 && dist < 20 && Math.random() < 0.4) pick = 'breath';
+    else pick = 'charge';
+  }
+  if (def.wings && d.ai.state === 'idle' && dist > 6 && Math.random() < 0.22 + def.aggro * 0.15 && d.ai.lastAtk !== 'dive') {
+    pick = 'takeoff';
+  }
+  if (pick === d.ai.lastAtk && pick !== 'charge') {
+    pick = pick === 'bite' ? 'tail' : pick === 'breath' ? (def.legs === 'quad' ? 'charge' : 'bite') : 'bite';
   }
   return pick;
 }
-function updateDragon(dt, t) {
-  const ai = S.ai, d = dragon.root, def = S.def;
-  const toP = tmp.copy(player.position).sub(d.position).setY(0);
+
+function updateOneDragon(d, dt, t) {
+  const ai = d.ai, def = d.def, root = d.root;
+  const toP = tmp.copy(player.position).sub(root.position).setY(0);
   const dist = toP.length();
   const wantYaw = Math.atan2(toP.x, toP.z);
-  const turn = (target, rate) => { let diff = ((target - d.rotation.y + Math.PI * 3) % (Math.PI * 2)) - Math.PI; d.rotation.y += THREE.MathUtils.clamp(diff, -rate * dt, rate * dt); return diff; };
-  const fwd = new THREE.Vector3(Math.sin(d.rotation.y), 0, Math.cos(d.rotation.y));
+  const turn = (target, rate) => {
+    let diff = ((target - root.rotation.y + Math.PI * 3) % (Math.PI * 2)) - Math.PI;
+    root.rotation.y += THREE.MathUtils.clamp(diff, -rate * dt, rate * dt);
+    return diff;
+  };
+  const fwd = new THREE.Vector3(Math.sin(root.rotation.y), 0, Math.cos(root.rotation.y));
   let walk = 0;
-  dragon.jaw.rotation.x = 0; dragon.neck.rotation.x = 0; dragon.tailBase.rotation.y = Math.sin(t * 2) * 0.25;
-  $('tele').textContent = '';
+  d.jaw.rotation.x = Math.max(0, d.jaw.rotation.x - dt * 2);
+  if (d.flinch > 0) { d.flinch -= dt; root.rotation.z = Math.sin(t * 30) * 0.08; }
+  else root.rotation.z *= 0.9;
+
   ai.t -= dt;
-  if (ai.state === 'dead') { d.rotation.z = Math.min(d.rotation.z + dt, Math.PI / 2 * 0.9); d.position.y = Math.max(d.position.y - dt, -1); return; }
+  if (ai.state === 'dead') {
+    root.rotation.z = Math.min(root.rotation.z + dt, Math.PI / 2 * 0.85);
+    root.position.y = Math.max(sampleHeight(root.position.x, root.position.z) - 1, root.position.y - dt);
+    return;
+  }
   if (S.over) return;
+
+  // flying states
+  if (ai.state === 'fly') {
+    d.flyY = Math.min(d.flyY + dt * 6, 8 + d.scale * 2);
+    root.position.y = sampleHeight(root.position.x, root.position.z) + d.flyY;
+    turn(wantYaw, 1.5);
+    root.position.addScaledVector(fwd, 3 * dt);
+    if (d.wings[0]) d.wings.forEach((w, i) => { w.rotation.z = Math.sin(t * 8) * 0.5 * (i ? 1 : -1); });
+    if (Math.random() < dt * 1.2) SFX.flap();
+    $('tele').textContent = '⚠ 飛行中';
+    if (ai.t <= 0) { ai.state = 'wind'; ai.atk = 'dive'; ai.t = ATK.dive.wind * def.windMul; ai.hit = false; }
+    animateDragonPose(d, dt, t, 0);
+    return;
+  }
+
   if (ai.state === 'idle') {
-    const diff = turn(wantYaw, 1.6 * def.speed);
-    const chase = 3.2 + def.aggro * 2.2;
-    if (dist > 9) { d.position.addScaledVector(fwd, chase * def.speed * dt); walk = 1; }
-    else if (dist < 5 && def.aggro > 0.6) { d.position.addScaledVector(fwd, -1.5 * dt); walk = 1; }
+    const diff = turn(wantYaw, 1.5 * def.speed);
+    const chase = (def.legs === 'quad' ? 4.2 : 3.4) + def.aggro * 2;
+    if (dist > 9) { root.position.addScaledVector(fwd, chase * def.speed * dt); walk = 1; if (Math.random() < dt * 2) SFX.foot(); }
     if (ai.t <= 0) {
-      const pick = pickAttack(def, dist, Math.abs(diff) > 1.55, ai.lastAtk);
-      ai.atk = pick; ai.lastAtk = pick; ai.state = 'wind';
-      ai.t = ATTACKS[pick].wind * (def.windMul || 1); ai.hit = false;
-      snd(90, 0.4, 'sawtooth', 0.12, 40);
+      const pick = pickAtk(d, dist, diff);
+      ai.atk = pick; ai.lastAtk = pick;
+      if (pick === 'takeoff') {
+        ai.state = 'wind'; ai.t = ATK.takeoff.wind; ai.hit = false; SFX.flap();
+      } else {
+        ai.state = 'wind'; ai.t = ATK[pick].wind * def.windMul; ai.hit = false;
+        if (pick === 'charge' || pick === 'roar') SFX.roar();
+        else SFX.roar();
+      }
     }
   } else if (ai.state === 'wind') {
-    const A = ATTACKS[ai.atk];
+    const A = ATK[ai.atk] || ATK.bite;
     $('tele').textContent = '⚠ ' + A.name;
-    // Lock facing during most of telegraph; slight track only early in wind
-    if (ai.atk !== 'tail' && ai.t > A.wind * (def.windMul || 1) * 0.35) turn(wantYaw, 1.8);
-    if (ai.atk === 'bite') dragon.neck.rotation.x = -0.45;
-    if (ai.atk === 'tail') { d.rotation.y -= dt * 0.35; dragon.tailBase.rotation.y = 0.9; }
-    if (ai.atk === 'charge') { d.position.y = Math.abs(Math.sin(t * 12)) * 0.12; }
-    if (ai.atk === 'breath') { dragon.neck.rotation.x = -0.65; dragon.jaw.rotation.x = 0.35; }
-    if (ai.t <= 0) { ai.state = 'act'; ai.t = A.act; ai.dir.copy(fwd); if (ai.atk === 'tail') ai.spin = 0; snd(ai.atk === 'breath' ? 160 : 70, 0.5, 'sawtooth', 0.2, -40); }
+    if (ai.atk === 'takeoff') {
+      d.jaw.rotation.x = 0.3;
+      if (ai.t <= 0) { ai.state = 'fly'; ai.t = 2.2 + Math.random() * 1.2; d.flyY = 0; }
+    } else {
+      if (ai.atk !== 'tail' && ai.atk !== 'slamL' && ai.atk !== 'slamR' && ai.t > A.wind * def.windMul * 0.3) turn(wantYaw, 1.6);
+      if (ai.atk === 'bite') d.neck.rotation.x = -0.4;
+      if (ai.atk === 'tail') { root.rotation.y -= dt * 0.3; d.tailBase.rotation.y = 0.85; }
+      if (ai.atk === 'slamL') root.rotation.y -= dt * 0.5;
+      if (ai.atk === 'slamR') root.rotation.y += dt * 0.5;
+      if (ai.atk === 'charge') { root.position.y = sampleHeight(root.position.x, root.position.z) + Math.abs(Math.sin(t * 10)) * 0.1; d.jaw.rotation.x = 0.35; }
+      if (ai.atk === 'breath') { d.neck.rotation.x = -0.55; d.jaw.rotation.x = 0.4; }
+      if (ai.atk === 'dive') { d.neck.rotation.x = 0.5; }
+      if (ai.t <= 0) {
+        ai.state = 'act'; ai.t = A.act; ai.dir.copy(fwd);
+        if (ai.atk === 'charge') SFX.stomp();
+      }
+    }
   } else if (ai.state === 'act') {
-    const A = ATTACKS[ai.atk];
+    const A = ATK[ai.atk] || ATK.bite;
+    const hornBonus = def.horns ? 1.3 : 1;
     if (ai.atk === 'bite') {
-      dragon.neck.rotation.x = 0.5; dragon.jaw.rotation.x = 0.5;
-      d.position.addScaledVector(ai.dir, 6 * dt);
-      const hp = worldPos(dragon.head);
-      if (!ai.hit && flatDist(hp, player.position) < 3.0) { ai.hit = true; hurtPlayer(25, hp); }
+      d.neck.rotation.x = 0.45; d.jaw.rotation.x = 0.55;
+      root.position.addScaledVector(ai.dir, 5 * dt);
+      const hp = worldPos(d.head);
+      if (!ai.hit && flatDist(hp, player.position) < 2.6 * d.scale + 0.5) { ai.hit = true; hurtPlayer(18, hp); }
+    } else if (ai.atk === 'slamL' || ai.atk === 'slamR') {
+      const side = ai.atk === 'slamL' ? 1 : -1;
+      root.rotation.y += side * dt * 2.2;
+      root.position.addScaledVector(new THREE.Vector3(Math.cos(root.rotation.y), 0, -Math.sin(root.rotation.y)).multiplyScalar(side), 6 * dt);
+      if (!ai.hit && dist < 4.5 * d.scale) { ai.hit = true; hurtPlayer(16, root.position); SFX.stomp(); }
     } else if (ai.atk === 'tail') {
-      const sp = Math.PI * 2 / A.act; d.rotation.y += sp * dt; dragon.tailBase.rotation.y = -0.5;
-      const reach = S.severed ? 6.5 : 10;
-      if (!ai.hit && dist < reach && dist > 2) {
-        const tipP = worldPos(dragon.tailSegs[S.severed ? 1 : dragon.tailSegs.length - 1]);
-        if (flatDist(tipP, player.position) < 3.0 || flatDist(worldPos(dragon.tailSegs[1]), player.position) < 2.5) { ai.hit = true; hurtPlayer(30, d.position); }
+      root.rotation.y += (Math.PI * 2 / A.act) * dt; d.tailBase.rotation.y = -0.5;
+      const reach = (d.severed ? 5 : 9) * d.scale;
+      if (!ai.hit && dist < reach && dist > 1.5) {
+        const tip = worldPos(d.tailSegs[d.severed ? 1 : d.tailSegs.length - 1]);
+        if (flatDist(tip, player.position) < 2.8 * d.scale) { ai.hit = true; hurtPlayer(22, root.position); }
       }
     } else if (ai.atk === 'charge') {
-      d.position.addScaledVector(ai.dir, 20 * def.speed * dt); walk = 2;
-      if (!ai.hit && dist < 4.0) { ai.hit = true; hurtPlayer(35, d.position); }
+      const spd = 18 * def.speed * hornBonus;
+      root.position.addScaledVector(ai.dir, spd * dt); walk = 2;
+      if (Math.random() < dt * 4) SFX.stomp();
+      if (!ai.hit && dist < 3.5 * d.scale) { ai.hit = true; hurtPlayer(28 * hornBonus, root.position); }
+      const before = { x: root.position.x, z: root.position.z };
+      pushOutObstacles(root.position, 2.5 * d.scale);
+      if (Math.abs(root.position.x - before.x) + Math.abs(root.position.z - before.z) > 0.02) {
+        ai.state = 'rec'; ai.t = 1.6; showMsg('撞石！', 0.6); SFX.stomp();
+      }
     } else if (ai.atk === 'breath') {
-      dragon.neck.rotation.x = -0.1; dragon.jaw.rotation.x = 0.6;
-      const mouth = worldPos(dragon.head).addScaledVector(fwd, 2);
-      if (Math.random() < 0.35) spawnBreath(mouth, ai.dir.clone().setY(-0.15).normalize(), BREATH_COL[def.breath]);
-      const rel = tmp2.copy(player.position).sub(d.position).setY(0);
-      const ang = rel.angleTo(ai.dir);
-      if (!ai.hit && ang < 0.35 && rel.length() < A.range) { ai.hit = true; hurtPlayer(30, d.position); }
+      d.neck.rotation.x = -0.15; d.jaw.rotation.x = 0.55;
+      const mouth = worldPos(d.head).addScaledVector(fwd, 1.5 * d.scale);
+      if (ai.t > A.act * 0.5 && Math.random() < 0.08) {
+        const elems = def.colors.map(c => COLOR_DEFS[c].elem).filter(Boolean);
+        const kind = elems[Math.floor(Math.random() * elems.length)] || 'fire';
+        spawnProjectile(mouth, ai.dir.clone().setY(-0.05), kind, 12);
+      }
+    } else if (ai.atk === 'dive') {
+      d.flyY = Math.max(0, d.flyY - dt * 14);
+      root.position.y = sampleHeight(root.position.x, root.position.z) + d.flyY;
+      root.position.addScaledVector(ai.dir, 14 * dt);
+      turn(wantYaw, 0.8);
+      if (!ai.hit && d.flyY < 2.5 && dist < 4 * d.scale) { ai.hit = true; hurtPlayer(26, root.position); SFX.stomp(); }
+      if (d.flyY <= 0.1) { ai.t = 0; d.flyY = 0; }
     }
-    if (ai.t <= 0) { ai.state = 'rec'; ai.t = A.rec * (1.05 + (1 - def.aggro) * 0.25); }
+    if (ai.t <= 0) {
+      if (ai.atk === 'dive') { ai.state = 'rec'; ai.t = ATK.dive.rec; d.flyY = 0; }
+      else { ai.state = 'rec'; ai.t = A.rec * (1.05 + (1 - def.aggro) * 0.2); }
+    }
   } else if (ai.state === 'rec') {
-    if (ai.atk === 'charge') d.position.addScaledVector(ai.dir, Math.max(0, ai.t) * 6 * dt);
-    if (ai.t <= 0) { ai.state = 'idle'; ai.t = idleCooldown(def); }
+    if (ai.atk === 'charge') root.position.addScaledVector(ai.dir, Math.max(0, ai.t) * 5 * dt);
+    d.neck.rotation.x *= 0.9;
+    if (ai.t <= 0) { ai.state = 'idle'; ai.t = idleCd(def); }
   }
-  // keep in arena + crash into obstacles while charging
-  const r = Math.hypot(d.position.x, d.position.z);
-  if (r > ARENA - 4) { d.position.x *= (ARENA - 4) / r; d.position.z *= (ARENA - 4) / r; if (ai.atk === 'charge' && ai.state === 'act') { ai.state = 'rec'; ai.t = 1.5; snd(60, 0.5, 'sawtooth', 0.2); } }
-  const before = { x: d.position.x, z: d.position.z };
-  pushOutObstacles(d.position, 3.2);
-  if ((ai.state === 'act' || ai.state === 'wind') && ai.atk === 'charge' && (Math.abs(d.position.x - before.x) + Math.abs(d.position.z - before.z)) > 0.02) {
-    ai.state = 'rec'; ai.t = 1.8; ai.hit = true; snd(70, 0.45, 'sawtooth', 0.18); showMsg('撞石！', 0.7);
+
+  // arena + height (when not flying high)
+  if (ai.state !== 'fly' && !(ai.state === 'act' && ai.atk === 'dive' && d.flyY > 0.5)) {
+    const r = Math.hypot(root.position.x, root.position.z);
+    if (r > ARENA - 4) {
+      root.position.x *= (ARENA - 4) / r; root.position.z *= (ARENA - 4) / r;
+      if (ai.atk === 'charge' && ai.state === 'act') { ai.state = 'rec'; ai.t = 1.4; SFX.stomp(); }
+    }
+    if (ai.state !== 'fly') {
+      pushOutObstacles(root.position, 2.4 * d.scale);
+      root.position.y = sampleHeight(root.position.x, root.position.z) + d.flyY;
+    }
   }
-  d.position.y = sampleHeight(d.position.x, d.position.z);
-  // anim
-  const ph = t * (walk === 2 ? 14 : 7);
-  dragon.legs.forEach((l, i) => l.rotation.x = walk ? Math.sin(ph + (i % 2 ? Math.PI : 0) + (i > 1 ? Math.PI : 0)) * 0.5 : 0);
-  dragon.wings.forEach((w, i) => w.rotation.z = Math.sin(t * 2) * 0.1 * (i ? 1 : -1) + (ai.state === 'wind' ? (i ? 0.4 : -0.4) : 0));
-  dragon.tailSegs.forEach((s, i) => { if (i) s.rotation.y = Math.sin(t * 2.5 - i * 0.6) * 0.12; });
-  // body collision with player
-  if (dist < 3.8) player.position.addScaledVector(toP.normalize(), 3.8 - dist);
+  // body push player
+  if (dist < 2.8 * d.scale && ai.state !== 'fly') {
+    const push = tmp.copy(player.position).sub(root.position).setY(0);
+    if (push.lengthSq() > 0.01) player.position.addScaledVector(push.normalize(), 2.8 * d.scale - dist);
+  }
+  animateDragonPose(d, dt, t, walk);
 }
+
+function animateDragonPose(d, dt, t, walk) {
+  const breath = Math.sin(t * 2.2) * 0.04;
+  d.root.scale.y = d.scale * (1 + breath);
+  // head track player
+  const toP = tmp.copy(player.position).sub(d.root.position);
+  const localYaw = Math.atan2(toP.x, toP.z) - d.root.rotation.y;
+  let ly = ((localYaw + Math.PI * 3) % (Math.PI * 2)) - Math.PI;
+  ly = THREE.MathUtils.clamp(ly, -0.6, 0.6);
+  d.head.rotation.y = lerp(d.head.rotation.y, ly, 1 - Math.exp(-dt * 4));
+  d.head.rotation.x = lerp(d.head.rotation.x, THREE.MathUtils.clamp(-toP.y * 0.02, -0.3, 0.3), 1 - Math.exp(-dt * 3));
+  // gait
+  const ph = t * (walk === 2 ? 12 : walk ? 6 : 0);
+  d.legs.forEach((l, i) => {
+    const biped = d.def.legs === 'biped';
+    if (!walk) { l.rotation.x = lerp(l.rotation.x, 0, 1 - Math.exp(-dt * 8)); return; }
+    const off = biped ? (i ? Math.PI : 0) : (i % 2 ? Math.PI : 0) + (i > 1 ? Math.PI * 0.5 : 0);
+    l.rotation.x = Math.sin(ph + off) * (walk === 2 ? 0.55 : 0.4);
+  });
+  // wings idle / flap
+  if (d.wings.length) {
+    const flying = d.ai.state === 'fly' || (d.ai.state === 'act' && d.ai.atk === 'dive');
+    d.wings.forEach((w, i) => {
+      const base = flying ? Math.sin(t * 9) * 0.55 : Math.sin(t * 2) * 0.12;
+      w.rotation.z = base * (i ? 1 : -1) + (d.ai.state === 'wind' ? (i ? 0.35 : -0.35) : 0);
+    });
+  }
+  // tail sway
+  d.tailBase.rotation.y = Math.sin(t * 1.8) * 0.22 + (d.ai.state === 'wind' && d.ai.atk === 'tail' ? 0.6 : 0);
+  d.tailSegs.forEach((s, i) => { if (i) s.rotation.y = Math.sin(t * 2.2 - i * 0.5) * 0.1; });
+  // neck idle
+  if (d.ai.state === 'idle' || d.ai.state === 'rec') d.neck.rotation.x = lerp(d.neck.rotation.x, Math.sin(t * 1.5) * 0.08, 1 - Math.exp(-dt * 3));
+}
+
+function updateDragons(dt, t) {
+  $('tele').textContent = '';
+  for (const d of dragons) updateOneDragon(d, dt, t);
+}
+
+function updateProjectiles(dt) {
+  for (let i = projectiles.length - 1; i >= 0; i--) {
+    const p = projectiles[i];
+    p.t -= dt; p.mesh.position.addScaledVector(p.v, dt); p.v.y -= 6 * dt;
+    if (!p.hit && flatDist(p.mesh.position, player.position) < 1.6) {
+      p.hit = true;
+      const opts = { poison: p.kind === 'poison', slow: p.kind === 'lightning', dark: p.kind === 'blast' };
+      hurtPlayer(p.dmg, p.mesh.position, opts);
+      if (p.kind === 'blast') S.camShake = Math.max(S.camShake, 0.5);
+      scene.remove(p.mesh); projectiles.splice(i, 1); continue;
+    }
+    if (p.t <= 0 || p.mesh.position.y < sampleHeight(p.mesh.position.x, p.mesh.position.z) - 0.5) {
+      if (p.kind === 'blast' && !p.hit && flatDist(p.mesh.position, player.position) < 5) {
+        hurtPlayer(p.dmg * 0.7, p.mesh.position, { dark: true });
+        S.camShake = Math.max(S.camShake, 0.4);
+      }
+      scene.remove(p.mesh); projectiles.splice(i, 1);
+    }
+  }
+}
+
+function updateDebuffs(dt) {
+  if (!S) return;
+  if (S.debuffs.poison > 0) {
+    S.debuffs.poison -= dt;
+    S.hp -= 6 * dt * S.ps.def;
+    if (Math.random() < dt * 2) SFX.poisonTick();
+    if (S.hp <= 0 && !S.over) { S.hp = 0; S.over = true; SFX.lose(); setTimeout(() => { $('otitle').textContent = '狩獵失敗'; $('otext').textContent = '中毒身亡…'; $('over').classList.remove('hidden'); }, 800); }
+  }
+  if (S.debuffs.slow > 0) S.debuffs.slow -= dt;
+  if (S.debuffs.dark > 0) S.debuffs.dark -= dt;
+  if (S.camShake > 0) S.camShake -= dt;
+}
+
 
 // ---------- player update ----------
 let attackHeldPrev = false, prevSwing = 0;
@@ -810,10 +1230,13 @@ function beginComboHit(step) {
   S.cd = Math.max(0.05, WEAPONS[run.weapon].cd * 0.35);
   S.swing = S.swingDur = hit.dur;
   S.atkBuf = false; S.comboWin = 0;
-  const v = tmp.copy(dragon.root.position).sub(player.position);
-  if (v.length() < 14) player.rotation.y = Math.atan2(v.x, v.z);
+  const nd = nearestDragon();
+  if (nd) {
+    const v = tmp.copy(nd.root.position).sub(player.position);
+    if (v.length() < 14) player.rotation.y = Math.atan2(v.x, v.z);
+  }
   doHit(hit.dmg, hit.label, hit.range / WEAPONS[run.weapon].range);
-  snd(170 + step * 35, 0.07, 'square', 0.1);
+  SFX.slash();
 }
 function updatePlayer(dt) {
   const w = WEAPONS[run.weapon];
@@ -827,7 +1250,7 @@ function updatePlayer(dt) {
   const specialHeld = input.special || pad.special;
   const cy = Math.cos(camYaw), sy = Math.sin(camYaw);
   const dir = new THREE.Vector3(-mx * cy - mz * sy, 0, mx * sy - mz * cy);
-  let speed = S.ps.spd * w.speedMul;
+  let speed = S.ps.spd * w.speedMul * (S.debuffs.slow > 0 ? 0.75 : 1);
   if (S.charge >= 0 || S.block) speed *= 0.35;
   if (S.drinkT > 0) speed *= 0.3;
   if (S.swing > 0) speed *= 0.55;
@@ -855,13 +1278,13 @@ function updatePlayer(dt) {
       S.st -= 25; S.dodgeT = ROLL_T; S.invuln = 0.38;
       S.dodgeDir = dir.lengthSq() > 0.01 ? dir.clone().normalize() : new THREE.Vector3(Math.sin(player.rotation.y), 0, Math.cos(player.rotation.y));
       player.rotation.y = Math.atan2(S.dodgeDir.x, S.dodgeDir.z);
-      snd(500, 0.08, 'triangle', 0.06); S.charge = -1; S.swing = 0; S.drinkT = 0; resetCombo();
+      SFX.roll(); S.charge = -1; S.swing = 0; S.drinkT = 0; resetCombo();
     }
   }
   if (S.dodgeT > 0 || dir.lengthSq() <= 0.01 || S.hurtT > 0) S.moveAmt = 0;
-  if (input.potion) { input.potion = false; if (S.potions > 0 && S.drinkT <= 0 && S.hp < S.ps.maxHp) { S.potions--; S.drinkT = 1.0; snd(700, 0.3, 'sine', 0.1, 300); resetCombo(); } }
+  if (input.potion) { input.potion = false; if (S.potions > 0 && S.drinkT <= 0 && S.hp < S.ps.maxHp) { S.potions--; S.drinkT = 1.0; SFX.potion(); resetCombo(); } }
   if (S.drinkT > 0) { S.drinkT -= dt; S.hp = Math.min(S.ps.maxHp, S.hp + S.ps.maxHp * 0.4 * dt); }
-  const faceDragon = () => { const v = tmp.copy(dragon.root.position).sub(player.position); if (v.length() < 14) player.rotation.y = Math.atan2(v.x, v.z); };
+  const faceDragon = () => { const nd = nearestDragon(); if (!nd) return; const v = tmp.copy(nd.root.position).sub(player.position); if (v.length() < 14) player.rotation.y = Math.atan2(v.x, v.z); };
   S.block = false;
   if (run.weapon === 'gs') {
     if (specialHeld && S.cd <= 0 && S.swing <= 0) { if (S.charge < 0) { S.charge = 0; faceDragon(); resetCombo(); } S.charge = Math.min(1.6, S.charge + dt); }
@@ -985,6 +1408,8 @@ function animatePlayer(dt) {
   rig.position.y = 1.0 + (S.dodgeT > 0 ? pose.bob : lerp(rig.position.y - 1.0, pose.bob, k));
 }
 
+
+
 // ---------- loop ----------
 const clock = new THREE.Clock();
 let time = 0;
@@ -992,20 +1417,46 @@ function hud() {
   if (!S) return;
   $('php').style.width = (S.hp / S.ps.maxHp * 100) + '%';
   $('pst').style.width = (S.st / S.ps.maxSt * 100) + '%';
-  $('dhp').style.width = (S.dhp / S.dmax * 100) + '%';
+  const alive = livingDragons();
+  const focus = nearestDragon() || dragons[0];
+  if (focus) {
+    const totalMax = dragons.reduce((a, d) => a + d.maxHp, 0);
+    const totalHp = dragons.reduce((a, d) => a + Math.max(0, d.hp), 0);
+    $('dhp').style.width = (totalHp / totalMax * 100) + '%';
+    $('tail').textContent = focus.severed ? '尾：已斷' : `尾：${Math.ceil(Math.max(0, focus.tailHp) / (focus.maxHp * 0.22) * 100)}%`;
+  }
   let pot = `藥水 ×${S.potions}`;
   if (S.charge >= 0) pot += ` · 蓄力`;
   else if (S.combo > 1) pot += ` · 連擊 ${S.combo}`;
   $('pot').textContent = pot;
-  $('tail').textContent = S.severed ? '尾：已斷' : `尾：${Math.ceil(Math.max(0, S.tailHp) / (S.dmax * 0.22) * 100)}%`;
+  // debuff icons
+  const db = $('debuffs');
+  if (db) {
+    const bits = [];
+    if (S.debuffs.poison > 0) bits.push(`<div class="db" style="color:#8d8">毒 ${S.debuffs.poison.toFixed(1)}s</div>`);
+    if (S.debuffs.slow > 0) bits.push(`<div class="db" style="color:#8cf">緩 ${S.debuffs.slow.toFixed(1)}s</div>`);
+    if (S.debuffs.dark > 0) bits.push(`<div class="db" style="color:#ccc">暗 ${S.debuffs.dark.toFixed(1)}s</div>`);
+    db.innerHTML = bits.join('');
+  }
+  const vig = $('vignette');
+  if (vig) vig.style.opacity = S.debuffs.dark > 0 ? '0.55' : '0';
 }
 function frame() {
   requestAnimationFrame(frame);
   const dt = Math.min(clock.getDelta(), 0.05); time += dt;
   pollGamepad(dt);
-  if (S && dragon) {
-    if (!S.over || S.ai.state === 'dead') { if (S.introT > 0) S.introT -= dt; else updateDragon(dt, time); }
-    if (!S.over) updatePlayer(dt);
+  if (S) {
+    if (!S.over) {
+      if (S.introT > 0) S.introT -= dt;
+      else { updateDragons(dt, time); updateProjectiles(dt); }
+      updatePlayer(dt);
+      updateDebuffs(dt);
+    } else {
+      updateDragons(dt, time);
+    }
+  } else if (titleDragon) {
+    titleDragon.root.rotation.y += dt * 0.2;
+    animateDragonPose(titleDragon, dt, time, 0);
   }
   for (let i = effects.length - 1; i >= 0; i--) {
     const e = effects[i]; e.t -= dt; e.obj.position.addScaledVector(e.v, dt);
@@ -1013,29 +1464,39 @@ function frame() {
     e.obj.material.opacity = Math.max(0, e.t * 1.5);
     if (e.t <= 0) { scene.remove(e.obj); effects.splice(i, 1); }
   }
-  scene.children.forEach(o => { if (o.userData.severed && o.position.y > 0.6) { o.userData.vy -= 20 * dt; o.position.y = Math.max(0.6, o.position.y + o.userData.vy * dt); o.rotation.y += o.userData.spin * dt; if (o.position.y <= 0.6) o.rotation.set(0, o.rotation.y, 0); } });
+  scene.children.forEach(o => {
+    if (o.userData.severed && o.position.y > 0.6) {
+      o.userData.vy -= 20 * dt; o.position.y = Math.max(0.6, o.position.y + o.userData.vy * dt);
+      o.rotation.y += o.userData.spin * dt;
+      if (o.position.y <= 0.6) o.rotation.set(0, o.rotation.y, 0);
+    }
+  });
   // camera
   const target = S ? player.position : new THREE.Vector3(0, 0, 10);
   if (!S) camYaw += dt * 0.15;
-  const dist = 11;
-  const lookY = target.y + 2.5;
-  camera.position.set(target.x - Math.sin(camYaw) * dist * Math.cos(camPitch), lookY + Math.sin(camPitch) * dist * 0.85, target.z - Math.cos(camYaw) * dist * Math.cos(camPitch));
+  const big = S && dragons.length ? Math.max(...dragons.map(d => d.def.size)) : 2;
+  const dist = 10 + Math.max(0, big - 1.5) * 2.2;
+  const lookY = target.y + 2.2 + Math.max(0, big - 2) * 0.4;
+  let shakeX = 0, shakeY = 0;
+  if (S && S.camShake > 0) { shakeX = (Math.random() - 0.5) * S.camShake * 0.8; shakeY = (Math.random() - 0.5) * S.camShake * 0.5; }
+  camera.position.set(
+    target.x - Math.sin(camYaw) * dist * Math.cos(camPitch) + shakeX,
+    lookY + Math.sin(camPitch) * dist * 0.85 + shakeY,
+    target.z - Math.cos(camYaw) * dist * Math.cos(camPitch)
+  );
   camera.lookAt(target.x, lookY, target.z);
   if (msgT > 0) { msgT -= dt; if (msgT <= 0) $('msg').textContent = ''; }
   hud();
-  // pixel-art: render scene to low-res RT, nearest-neighbor blit to screen
   if (hasWebGL && pixelRT) {
-    renderer.setRenderTarget(pixelRT);
-    renderer.clear();
-    renderer.render(scene, camera);
-    renderer.setRenderTarget(null);
-    renderer.clear();
-    renderer.render(blitScene, blitCam);
-  } else {
-    renderer.render(scene, camera);
-  }
+    renderer.setRenderTarget(pixelRT); renderer.clear(); renderer.render(scene, camera);
+    renderer.setRenderTarget(null); renderer.clear(); renderer.render(blitScene, blitCam);
+  } else renderer.render(scene, camera);
 }
-// title backdrop dragon
-dragon = buildDragon(DRAGONS[0]); dragon.root.position.set(0, sampleHeight(0, 10), 10);
+spawnTitleDragon();
 frame();
-window.__hunt = { run, get S() { return S; }, player, startFight, severTail, pad, pollGamepad, refreshPadPresence, input, keys, PIXEL_SCALE, pStats, ATTACKS, idleCooldown, pickAttack, COMBOS, sampleHeight, OBSTACLES, HEIGHT_ZONES, pushOutObstacles, beginComboHit, resetCombo };
+window.__hunt = {
+  run, get S() { return S; }, player, get dragons() { return dragons; }, get living() { return livingDragons(); },
+  startFight, showPreview, generateEncounter, generateDragon, playerPower, estimatePower,
+  pad, pollGamepad, COMBOS, sampleHeight, OBSTACLES, COLOR_DEFS, SFX, nearestDragon, beginComboHit, resetCombo, PIXEL_SCALE, pStats,
+  goTitle, spawnTitleDragon,
+};
