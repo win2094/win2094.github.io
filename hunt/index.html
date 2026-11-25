@@ -2,41 +2,68 @@
 <html lang="zh-HK">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <title>鬥技場狩龍</title>
 <style>
 *{box-sizing:border-box;-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent}
-html,body{margin:0;height:100%;overflow:hidden;background:#000;color:#fff;font-family:"IBM Plex Sans","Segoe UI","Noto Sans HK",sans-serif;touch-action:none}
-canvas{display:block}
-#hud{position:fixed;inset:0;pointer-events:none;font-size:32px}
-.bar{height:30px;background:#0008;border:3px solid #fff8;border-radius:10px;overflow:hidden}
+html,body{margin:0;height:100%;height:100dvh;overflow:hidden;background:#000;color:#fff;font-family:"IBM Plex Sans","Segoe UI","Noto Sans HK",sans-serif;touch-action:none}
+canvas{display:block;width:100%;height:100%}
+#hud{position:fixed;inset:0;pointer-events:none;font-size:clamp(18px,4.2vw,32px);
+  padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)}
+.bar{height:clamp(16px,3.5vw,30px);background:#0008;border:3px solid #fff8;border-radius:10px;overflow:hidden}
 .bar>div{height:100%;transition:width .15s}
-#ptop{position:absolute;left:16px;top:12px;width:min(39vw,520px)}
-#dtop{position:absolute;right:16px;top:12px;width:min(39vw,520px);text-align:right}
-.lbl{font-size:32px;font-weight:700;text-shadow:0 2px 4px #000;margin:4px 0}
-#btns{position:absolute;left:50%;transform:translateX(-50%);top:8px;display:flex;flex-direction:column;gap:8px;pointer-events:auto}
-.sb{font-size:32px;padding:6px 14px;border-radius:12px;border:2px solid #fff8;background:#000a;color:#fff}
-#msg{position:absolute;left:50%;top:30%;transform:translate(-50%,-50%);font-size:52px;font-weight:800;text-shadow:0 3px 8px #000;text-align:center;white-space:nowrap}
-#tele{position:absolute;left:50%;top:44%;transform:translateX(-50%);font-size:40px;color:#ffcf40;font-weight:800;text-shadow:0 2px 6px #000}
-#touch{position:absolute;inset:0;pointer-events:none}
-#stick{position:absolute;left:30px;bottom:30px;width:220px;height:220px;border-radius:50%;background:#fff2;border:3px solid #fff5;pointer-events:auto}
-#knob{position:absolute;left:70px;top:70px;width:80px;height:80px;border-radius:50%;background:#fff6}
+#ptop{position:absolute;left:max(12px,env(safe-area-inset-left));top:max(8px,env(safe-area-inset-top));width:min(39vw,520px)}
+#dtop{position:absolute;right:max(12px,env(safe-area-inset-right));top:max(8px,env(safe-area-inset-top));width:min(39vw,520px);text-align:right}
+.lbl{font-size:clamp(16px,3.8vw,32px);font-weight:700;text-shadow:0 2px 4px #000;margin:4px 0}
+#btns{position:absolute;left:50%;transform:translateX(-50%);top:max(6px,env(safe-area-inset-top));display:flex;flex-direction:column;gap:8px;pointer-events:auto;z-index:5}
+.sb{font-size:clamp(16px,3.5vw,28px);padding:8px 14px;min-height:44px;border-radius:12px;border:2px solid #fff8;background:#000a;color:#fff}
+#msg{position:absolute;left:50%;top:28%;transform:translate(-50%,-50%);font-size:clamp(28px,7vw,52px);font-weight:800;text-shadow:0 3px 8px #000;text-align:center;white-space:pre-line;max-width:92vw}
+#tele{position:absolute;left:50%;top:42%;transform:translateX(-50%);font-size:clamp(24px,5.5vw,40px);color:#ffcf40;font-weight:800;text-shadow:0 2px 6px #000}
+#padstatus{position:absolute;left:50%;bottom:max(8px,env(safe-area-inset-bottom));transform:translateX(-50%);font-size:clamp(14px,3.2vw,22px);font-weight:700;color:#8fd4ff;text-shadow:0 2px 6px #000;opacity:0;transition:opacity .25s;pointer-events:none;z-index:4}
+#padstatus.on{opacity:1}
+#help{position:absolute;left:max(10px,env(safe-area-inset-left));bottom:max(8px,env(safe-area-inset-bottom));max-width:min(46vw,420px);font-size:clamp(11px,2.4vw,16px);line-height:1.35;opacity:.78;text-shadow:0 1px 3px #000;pointer-events:none}
+#touch{position:absolute;inset:0;pointer-events:none;z-index:3}
+#stick{position:absolute;left:max(16px,env(safe-area-inset-left));bottom:max(20px,calc(env(safe-area-inset-bottom) + 12px));width:min(42vw,200px);height:min(42vw,200px);min-width:120px;min-height:120px;border-radius:50%;background:#fff2;border:3px solid #fff5;pointer-events:auto}
+#knob{position:absolute;left:50%;top:50%;width:36%;height:36%;margin-left:-18%;margin-top:-18%;border-radius:50%;background:#fff6;transform:translate(0,0)}
 #acts{position:absolute;inset:0;pointer-events:none}
-#acts .ab{position:absolute;pointer-events:auto}
-#atk{right:20px;bottom:20px;width:150px;height:150px!important;background:#7a1a1a!important;font-size:40px!important}
-#roll{right:190px;bottom:16px;width:150px;height:150px!important;border:4px solid #8cf!important;background:#1a4a7acc!important;font-size:36px!important;font-weight:800}
-#spc{right:30px;bottom:190px;width:110px}
-#pot2{right:160px;bottom:190px;width:100px;height:100px!important}
-.ab{height:110px;border-radius:50%;border:3px solid #fff8;background:#0009;color:#fff;font-size:32px;font-weight:700}
-.panel{position:fixed;inset:0;background:#000c;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;font-size:36px;text-align:center;padding:20px;overflow:auto}
-.panel h1{font-size:60px;margin:0}
-.panel button{font-size:36px;padding:14px 28px;border-radius:14px;border:3px solid #ffcf40;background:#3a2410;color:#fff;min-width:320px}
-.row{display:flex;align-items:center;gap:16px;font-size:36px}
-.row button{min-width:80px;padding:6px 18px}
+#acts .ab{position:absolute;pointer-events:auto;min-width:44px;min-height:44px}
+#atk{right:max(14px,env(safe-area-inset-right));bottom:max(16px,calc(env(safe-area-inset-bottom) + 8px));width:min(28vw,140px);height:min(28vw,140px)!important;min-width:88px;min-height:88px;background:#7a1a1a!important;font-size:clamp(22px,5vw,40px)!important}
+#roll{right:max(calc(14px + min(28vw,140px) + 12px),calc(env(safe-area-inset-right) + min(28vw,140px) + 12px));bottom:max(14px,calc(env(safe-area-inset-bottom) + 6px));width:min(24vw,120px);height:min(24vw,120px)!important;min-width:72px;min-height:72px;border:4px solid #8cf!important;background:#1a4a7acc!important;font-size:clamp(18px,4vw,32px)!important;font-weight:800}
+#spc{right:max(22px,env(safe-area-inset-right));bottom:max(calc(16px + min(28vw,140px) + 10px),calc(env(safe-area-inset-bottom) + min(28vw,140px) + 18px));width:min(20vw,100px);min-width:64px;min-height:64px}
+#pot2{right:max(calc(22px + min(20vw,100px) + 14px),calc(env(safe-area-inset-right) + min(20vw,100px) + 14px));bottom:max(calc(16px + min(28vw,140px) + 10px),calc(env(safe-area-inset-bottom) + min(28vw,140px) + 18px));width:min(18vw,92px);height:min(18vw,92px)!important;min-width:56px;min-height:56px}
+.ab{width:min(20vw,100px);height:min(20vw,100px);aspect-ratio:1;border-radius:50%;border:3px solid #fff8;background:#0009;color:#fff;font-size:clamp(18px,4vw,32px);font-weight:700}
+.panel{position:fixed;inset:0;background:#000c;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;font-size:clamp(20px,4.5vw,36px);text-align:center;padding:max(16px,env(safe-area-inset-top)) max(16px,env(safe-area-inset-right)) max(16px,env(safe-area-inset-bottom)) max(16px,env(safe-area-inset-left));overflow:auto;z-index:20}
+.panel h1{font-size:clamp(36px,9vw,60px);margin:0}
+.panel button{font-size:clamp(20px,4.5vw,36px);padding:14px 28px;min-height:48px;border-radius:14px;border:3px solid #ffcf40;background:#3a2410;color:#fff;min-width:min(86vw,320px)}
+.row{display:flex;align-items:center;gap:16px;font-size:clamp(20px,4.5vw,36px)}
+.row button{min-width:80px;min-height:44px;padding:6px 18px}
 .hidden{display:none!important}
-#keys{font-size:24px;opacity:.8}
-@media (max-height:500px){#pot2{right:355px;bottom:20px}#spc{right:355px;bottom:135px}}
-@media (orientation:portrait){#ptop,#dtop{width:44vw}#btns{top:auto;bottom:422px;flex-direction:row;left:auto;right:12px;transform:none}#stick{bottom:190px;left:20px}#roll{right:auto;left:20px}#spc{bottom:190px}#pot2{right:20px;bottom:310px}}
+#keys{font-size:clamp(14px,3.2vw,22px);opacity:.85;max-width:min(920px,94vw);line-height:1.45;text-align:left}
+@media (orientation:landscape) and (max-height:520px){
+  #ptop,#dtop{width:min(34vw,420px)}
+  .lbl{font-size:clamp(14px,2.8vw,22px)}
+  #stick{width:min(28vh,160px);height:min(28vh,160px);bottom:max(10px,env(safe-area-inset-bottom));left:max(12px,env(safe-area-inset-left))}
+  #atk{width:min(22vh,110px);height:min(22vh,110px)!important;min-width:72px;min-height:72px}
+  #roll{width:min(18vh,96px);height:min(18vh,96px)!important;min-width:64px;min-height:64px;right:max(calc(14px + min(22vh,110px) + 10px),calc(env(safe-area-inset-right) + min(22vh,110px) + 10px))}
+  #spc{width:min(16vh,84px);min-width:56px;min-height:56px;bottom:max(calc(10px + min(22vh,110px) + 8px),calc(env(safe-area-inset-bottom) + min(22vh,110px) + 8px))}
+  #pot2{width:min(15vh,78px);height:min(15vh,78px)!important;min-width:52px;min-height:52px;bottom:max(calc(10px + min(22vh,110px) + 8px),calc(env(safe-area-inset-bottom) + min(22vh,110px) + 8px));right:max(calc(22px + min(16vh,84px) + 10px),calc(env(safe-area-inset-right) + min(16vh,84px) + 10px))}
+  #help{max-width:38vw;font-size:11px}
+  #btns{flex-direction:row;top:max(4px,env(safe-area-inset-top))}
+}
+@media (orientation:portrait){
+  #ptop,#dtop{width:42vw}
+  /* keep mute/restart top-right so they never sit on action buttons */
+  #btns{top:max(8px,env(safe-area-inset-top));bottom:auto;flex-direction:row;left:auto;right:max(10px,env(safe-area-inset-right));transform:none;gap:6px}
+  #btns .sb{padding:6px 10px;font-size:clamp(14px,3.4vw,22px)}
+  #dtop{top:max(56px,calc(env(safe-area-inset-top) + 48px))}
+  #stick{bottom:max(16px,calc(env(safe-area-inset-bottom) + 8px));left:max(14px,env(safe-area-inset-left))}
+  #roll{right:auto;left:max(14px,env(safe-area-inset-left));bottom:max(calc(16px + min(42vw,200px) + 8px),calc(env(safe-area-inset-bottom) + min(42vw,200px) + 16px))}
+  #atk{bottom:max(16px,calc(env(safe-area-inset-bottom) + 8px))}
+  #spc{right:max(18px,env(safe-area-inset-right));bottom:max(calc(16px + min(28vw,140px) + 12px),calc(env(safe-area-inset-bottom) + min(28vw,140px) + 20px))}
+  #pot2{right:max(calc(18px + min(20vw,100px) + 12px),calc(env(safe-area-inset-right) + min(20vw,100px) + 12px));bottom:max(calc(16px + min(28vw,140px) + 12px),calc(env(safe-area-inset-bottom) + min(28vw,140px) + 20px));left:auto}
+  #help{display:none}
+  #padstatus{bottom:auto;top:max(96px,calc(env(safe-area-inset-top) + 88px));left:50%;transform:translateX(-50%)}
+}
 </style>
 <script type="importmap">{"imports":{"three":"https://unpkg.com/three@0.160.0/build/three.module.js"}}</script>
 </head>
@@ -46,6 +73,8 @@ canvas{display:block}
   <div id="dtop"><div class="lbl" id="dname">火龍</div><div class="bar"><div id="dhp" style="background:#d33;width:100%;margin-left:auto"></div></div><div class="lbl" id="tail">尾：完好</div></div>
   <div id="btns"><button class="sb" id="mute">🔊 聲</button><button class="sb" id="restart">↻ 重新</button></div>
   <div id="tele"></div><div id="msg"></div>
+  <div id="padstatus">手掣已連接</div>
+  <div id="help">鍵：WASD/方向鍵移動 · 滑鼠/拖曳視角 · J/左鍵斬 · K/右鍵技 · 空白/Shift翻滾 · Q藥<br>手掣：左搖桿移動 · 右搖桿視角 · ✕/R1斬 · ○翻滾 · L1技 · △藥 · Options重新 · Share靜音</div>
   <div id="touch" class="hidden"><div id="stick"><div id="knob"></div></div>
     <div id="acts"><button class="ab" id="pot2" data-a="potion">藥</button><button class="ab" id="spc" data-a="special">技</button><button class="ab" id="roll" data-a="dodge">翻滾</button><button class="ab" id="atk" data-a="attack">斬</button></div></div>
 </div>
@@ -53,7 +82,7 @@ canvas{display:block}
   <button data-w="gs">大劍（慢、重、可蓄力）</button>
   <button data-w="ss">單手劍（快、可格擋）</button>
   <button data-w="db">雙刀（極快連擊）</button>
-  <div id="keys">電腦：WASD 移動、滑鼠左鍵/J 攻擊、右鍵/K 技（蓄力/格擋/亂舞）、空白鍵/Shift 翻滾（無敵、耗耐力）、Q 飲藥、拖滑鼠轉視角</div></div>
+  <div id="keys">電腦：WASD／方向鍵移動、滑鼠左鍵／J 攻擊、右鍵／K 技（蓄力／格擋／亂舞）、空白鍵／Shift 翻滾、Q 飲藥、拖滑鼠轉視角<br>手掣（DualSense／DualShock／通用）：左搖桿移動、右搖桿視角（冇右搖桿用十字鍵）、✕／R1 攻擊、○ 翻滾、L1 技、△ 藥水、Options 重新、Share 靜音<br>手機：虛擬搖桿＋大按鈕；接上手掣可同時用</div></div>
 <div class="panel hidden" id="stats"><h1 id="stitle">勝利！</h1><div id="spts"></div><div id="slist"></div><button id="snext">下一戰</button></div>
 <div class="panel hidden" id="over"><h1 id="otitle">狩獵失敗</h1><div id="otext"></div><button id="oagain">再嚟</button></div>
 <script type="module" src="game.js"></script>
