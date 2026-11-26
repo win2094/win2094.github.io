@@ -531,6 +531,7 @@ const SFX = {
   roar: () => { snd(70, 0.55, 'sawtooth', 0.18, -30); snd(90, 0.4, 'square', 0.08, 40); },
   stomp: () => { snd(55, 0.15, 'sine', 0.16, -20); noiseBurst(0.08, 0.1, 120); },
   flap: () => snd(180, 0.12, 'triangle', 0.05, -80),
+  windBlast: () => { noiseBurst(0.35, 0.18, 160); snd(140, 0.28, 'triangle', 0.12, -90); snd(90, 0.22, 'sine', 0.1, -40); },
   fire: () => { snd(220, 0.25, 'sawtooth', 0.12, 120); noiseBurst(0.2, 0.1, 600); },
   poison: () => snd(340, 0.2, 'triangle', 0.1, -60),
   lightning: () => { snd(900, 0.08, 'square', 0.12); snd(600, 0.15, 'sawtooth', 0.08, -400); },
@@ -1330,6 +1331,68 @@ function spawnSlashTrail(at, dir, heavy) {
   effects.push({ obj: trail, t: 0.18, v: dir.clone().multiplyScalar(2), grow: false, kind: 'trail' });
 }
 
+/** Expanding dust / wind rings for takeoff pressure blast */
+function spawnWindBlastVfx(origin, range) {
+  const dustCol = 0xc8b890;
+  const ringCol = 0xdde8f0;
+  for (let i = 0; i < 3; i++) {
+    if (effects.length > 52) break;
+    const ring = new THREE.Mesh(
+      new THREE.TorusGeometry(0.8 + i * 0.15, 0.08 + i * 0.02, 6, 20),
+      new THREE.MeshBasicMaterial({ color: ringCol, transparent: true, opacity: 0.7 - i * 0.12 })
+    );
+    ring.rotation.x = Math.PI / 2;
+    ring.position.set(origin.x, origin.y + 0.15 + i * 0.12, origin.z);
+    ring.scale.setScalar(0.35 + i * 0.1);
+    scene.add(ring);
+    effects.push({ obj: ring, t: 0.5 + i * 0.08, v: new THREE.Vector3(0, 0.4, 0), grow: true, kind: 'ring' });
+  }
+  const n = 14;
+  for (let i = 0; i < n; i++) {
+    if (effects.length > 56) break;
+    const ang = (i / n) * Math.PI * 2 + Math.random() * 0.2;
+    const dust = new THREE.Mesh(
+      new THREE.BoxGeometry(0.35 + Math.random() * 0.35, 0.2, 0.35 + Math.random() * 0.35),
+      new THREE.MeshBasicMaterial({ color: dustCol, transparent: true, opacity: 0.85 })
+    );
+    dust.position.set(origin.x, origin.y + 0.2, origin.z);
+    scene.add(dust);
+    const spd = 6 + Math.random() * 5 + range * 0.15;
+    effects.push({
+      obj: dust, t: 0.45 + Math.random() * 0.2, kind: 'spark',
+      v: new THREE.Vector3(Math.sin(ang) * spd, 1.5 + Math.random() * 2.5, Math.cos(ang) * spd),
+    });
+  }
+}
+
+/** Winged takeoff: push player away with readable wind pressure (no HP damage) */
+function takeoffWindBlast(d) {
+  const origin = d.root.position.clone();
+  origin.y = sampleHeight(origin.x, origin.z) + 0.25;
+  const range = 9 + d.scale * 2.8;
+  spawnWindBlastVfx(origin, range);
+  SFX.windBlast();
+  if (S) S.camShake = Math.max(S.camShake || 0, 0.38);
+  showMsg('氣壓！', 0.55);
+  if (!S || S.over) return { range, pushed: false, force: 0 };
+  const dist = flatDist(player.position, d.root.position);
+  if (dist >= range) return { range, pushed: false, force: 0, dist };
+  const away = tmp.copy(player.position).sub(d.root.position).setY(0);
+  if (away.lengthSq() < 0.01) away.set(-Math.sin(d.root.rotation.y), 0, -Math.cos(d.root.rotation.y));
+  const falloff = 1 - dist / range;
+  const force = (5 + d.scale * 2) * (0.4 + falloff * 0.6);
+  away.normalize().multiplyScalar(force);
+  player.position.add(away);
+  pushOutObstacles(player.position, 0.7);
+  let rr = Math.hypot(player.position.x, player.position.z);
+  if (rr > ARENA) { player.position.x *= ARENA / rr; player.position.z *= ARENA / rr; }
+  player.position.y = sampleHeight(player.position.x, player.position.z);
+  // interrupt wind-ups; pure knockback (dodge i-frames still work vs damage, but wind still shoves)
+  if (S.charge >= 0) S.charge = -1;
+  S.hurtT = Math.max(S.hurtT, 0.22);
+  return { range, pushed: true, force, dist };
+}
+
 const floaters = [];
 function spawnDmgNumber(worldPos3, amount, opts = {}) {
   const el = document.createElement('div');
@@ -1392,7 +1455,7 @@ const ATK = {
   tail:    { name: '甩尾！', wind: 1.25, act: 0.7, rec: 1.0, range: 10 },
   charge:  { name: '衝撞！', wind: 1.35, act: 1.25, rec: 1.25, range: 40 },
   breath:  { name: '吐息！', wind: 1.1, act: 1.35, rec: 1.15, range: 28 },
-  takeoff: { name: '起飛！', wind: 0.9, act: 0.8, rec: 0.4, range: 99 },
+  takeoff: { name: '起飛！', wind: 1.15, act: 0.8, rec: 0.4, range: 99 },
   dive:    { name: '俯衝！', wind: 1.2, act: 1.1, rec: 1.2, range: 99 },
 };
 
@@ -1587,9 +1650,23 @@ function updateOneDragon(d, dt, t) {
     const A = ATK[ai.atk] || ATK.bite;
     $('tele').textContent = '⚠ ' + A.name;
     if (ai.atk === 'takeoff') {
+      // readable telegraph: crouch + wing raise before lift-off blast
       d.jaw.rotation.x = 0.3;
-      if (ai.t <= 0) { ai.state = 'fly'; ai.t = 2.2 + Math.random() * 1.2; d.flyY = 0; }
+      const windFull = ATK.takeoff.wind;
+      const windP = 1 - Math.max(0, ai.t) / Math.max(0.001, windFull);
+      d.crouchY = -0.22 * Math.min(1, windP);
+      if (d.wings[0]) d.wings.forEach((w, i) => {
+        const side = i ? 1 : -1;
+        w.rotation.z = lerp(w.rotation.z, side * (0.35 + windP * 0.85), 1 - Math.exp(-dt * 6));
+      });
+      if (Math.random() < dt * 2.5) SFX.flap();
+      if (ai.t <= 0) {
+        d.crouchY = 0;
+        takeoffWindBlast(d);
+        ai.state = 'fly'; ai.t = 2.2 + Math.random() * 1.2; d.flyY = 0.6;
+      }
     } else {
+      // track during wind-up; breath locks aim at the commit frame below
       if (ai.atk !== 'tail' && ai.atk !== 'slamL' && ai.atk !== 'slamR') turn(wantYaw, 2.2);
       if (ai.atk === 'bite') d.neck.rotation.x = -0.4;
       if (ai.atk === 'tail') { root.rotation.y -= dt * 0.3; d.tailBase.rotation.y = 0.85; }
@@ -1599,7 +1676,10 @@ function updateOneDragon(d, dt, t) {
       if (ai.atk === 'breath') { d.neck.rotation.x = -0.45; d.jaw.rotation.x = 0.55; }
       if (ai.atk === 'dive') { d.neck.rotation.x = 0.5; }
       if (ai.t <= 0) {
-        ai.state = 'act'; ai.t = A.act; ai.dir.copy(fwd);
+        // commit: final face for breath, then lock ai.dir for the whole act
+        if (ai.atk === 'breath') root.rotation.y = wantYaw;
+        ai.state = 'act'; ai.t = A.act;
+        ai.dir.set(Math.sin(root.rotation.y), 0, Math.cos(root.rotation.y));
         ai.breathShots = 0;
         if (ai.atk === 'charge') SFX.stomp();
       }
@@ -1638,20 +1718,19 @@ function updateOneDragon(d, dt, t) {
         ai.state = 'rec'; ai.t = 1.1; showMsg('撞石！', 0.5); SFX.stomp(); d.steerSide *= -1;
       }
     } else if (ai.atk === 'breath') {
-      // keep facing player and fire a clear volley
-      turn(wantYaw, 2.8);
+      // locked aim — do NOT track the player mid-breath; volley follows committed ai.dir
       d.neck.rotation.x = -0.2; d.jaw.rotation.x = 0.65;
       const elapsed = A.act - ai.t;
       const elems = dragonElems(def);
-      // 3 reliable shots at 0.15s, 0.45s, 0.75s
+      // 3 reliable shots at 0.15s, 0.45s, 0.75s along the locked direction
       const schedule = [0.15, 0.45, 0.75];
       while (ai.breathShots < schedule.length && elapsed >= schedule[ai.breathShots]) {
         const kind = elems[ai.breathShots % elems.length] || elems[0] || 'fire';
         const mouth = worldPos(d.head);
         mouth.y += 0.4 * d.scale;
-        const aim = tmp2.copy(player.position).sub(mouth);
-        aim.y = (player.position.y + 1.2) - mouth.y;
-        if (aim.lengthSq() < 0.01) aim.set(Math.sin(root.rotation.y), -0.05, Math.cos(root.rotation.y));
+        const aim = tmp2.copy(ai.dir);
+        aim.y = -0.04; // slight drop; horizontal direction is frozen at commit
+        if (aim.lengthSq() < 0.01) aim.set(Math.sin(root.rotation.y), -0.04, Math.cos(root.rotation.y));
         spawnProjectile(mouth, aim, kind, 14);
         showMsg(kind === 'fire' ? '火球！' : kind === 'poison' ? '毒液！' : kind === 'lightning' ? '雷球！' : '暗爆！', 0.45);
         ai.breathShots++;
@@ -1683,9 +1762,10 @@ function updateOneDragon(d, dt, t) {
     }
     if (ai.state !== 'fly') {
       pushOutObstacles(root.position, 2.4 * d.scale);
-      root.position.y = sampleHeight(root.position.x, root.position.z) + d.flyY;
+      root.position.y = sampleHeight(root.position.x, root.position.z) + d.flyY + (d.crouchY || 0);
     }
   }
+  if (!(ai.state === 'wind' && ai.atk === 'takeoff')) d.crouchY = 0;
   // body push player
   if (dist < 2.8 * d.scale && ai.state !== 'fly') {
     const push = tmp.copy(player.position).sub(root.position).setY(0);
@@ -2219,6 +2299,7 @@ window.__hunt = {
   get PIXEL_SCALE() { return PIXEL_SCALE; }, pStats, DB_ATK_BUFF_T, DB_ATK_BUFF_MUL,
   goTitle, spawnTitleDragon, hurtPlayer, ensureAudio, spawnProjectile, pickAtk, dragonElems,
   doHit, spawnHitBurst, spawnDmgNumber, applyDragonPain, beginComboHit, severTail, animatePlayer, buildWeapon,
+  takeoffWindBlast, spawnWindBlastVfx, ATK,
   get muted() { return muted; }, get bgmMuted() { return bgmMuted; }, get bgmMode() { return bgmMode; },
   get projectiles() { return projectiles; }, get effects() { return effects; }, get floaters() { return floaters; },
 };
