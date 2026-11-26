@@ -555,6 +555,7 @@ const SFX = {
   hitSever: () => { snd(90, 0.22, 'sawtooth', 0.18, -50); snd(320, 0.12, 'square', 0.1, 200); noiseBurst(0.14, 0.14, 180); },
   painRoar: () => { snd(55, 0.45, 'sawtooth', 0.2, -25); snd(80, 0.35, 'square', 0.1, 30); noiseBurst(0.2, 0.1, 90); },
   enrage: () => { snd(60, 0.7, 'sawtooth', 0.22, 40); snd(100, 0.5, 'square', 0.12, -20); noiseBurst(0.25, 0.12, 140); },
+  pinRoar: () => { snd(48, 0.85, 'sawtooth', 0.26, 35); snd(70, 0.7, 'square', 0.16, -20); snd(110, 0.45, 'sawtooth', 0.12, 60); noiseBurst(0.35, 0.16, 100); },
   roll: () => snd(500, 0.08, 'triangle', 0.06, -200),
   roar: () => { snd(70, 0.55, 'sawtooth', 0.18, -30); snd(90, 0.4, 'square', 0.08, 40); },
   stomp: () => { snd(55, 0.15, 'sine', 0.16, -20); noiseBurst(0.08, 0.1, 120); },
@@ -850,6 +851,7 @@ function buildDragon(def) {
     scale, bodyR: 2.6 * scale, headR: 1.5 * scale, flyY: 0,
     hp: def.hp, maxHp: def.hp, tailHp: def.hp * 0.22, severed: false, flinch: 0,
     stagger: 0, painRoarCd: 0, enraged: false, limp: false,
+    pinT: 0, pinHits: 0, pinRoarCd: 0, hyperArmor: 0, // anti-stunlock pressure roar
     stuckT: 0, lastPos: new THREE.Vector3(), steerSide: Math.random() < 0.5 ? 1 : -1,
     ai: { state: 'idle', t: 1.2 + Math.random(), atk: null, dir: new THREE.Vector3(), hit: false, lastAtk: '', phase: 0, breathShots: 0, goal: null },
   };
@@ -921,6 +923,7 @@ function startFight(defs) {
   S = {
     ps, hp: ps.maxHp, st: ps.maxSt, potions: 3, cd: 0, swing: 0, swingDur: 0, charge: -1, block: false, dodgeT: 0, invuln: 0, drinkT: 0, hurtT: 0,
     combo: 0, comboStep: 0, atkBuf: false, comboWin: 0, comboId: '', comboRoute: '', pendingInput: null, atkHold: 0, atkBoostT: 0,
+    stunT: 0, // dragon pin-roar stun (can't move/attack)
     debuffs: { poison: 0, slow: 0, dark: 0 }, camShake: 0, hitFlash: 0, hurtFx: 0, over: false, introT: 2.0, winPending: false,
   };
   $('dname').textContent = list.length > 1 ? `第${run.fight + 1}戰：${list.length} 龍` : `第${run.fight + 1}戰：${primary.def.name}`;
@@ -1274,8 +1277,14 @@ function doHit(mult, label, rangeMul = 1) {
 function applyDragonPain(d, dmg, heavy, prevHp) {
   const pct = d.hp / d.maxHp;
   const wasAbove = prevHp / d.maxHp;
+  // hyper armor after pin-roar: take damage but don't get locked again
+  if (d.hyperArmor > 0) {
+    d.flinch = Math.max(d.flinch, 0.12);
+    return;
+  }
   // flinch always; stagger on heavy or when already hurt
   d.flinch = Math.max(d.flinch, heavy ? 0.55 : 0.28);
+  const wasPinned = d.stagger > 0.05 || d.ai.atk === 'stagger' || d.ai.state === 'rec';
   if (heavy || dmg > d.maxHp * 0.08) {
     d.stagger = Math.max(d.stagger, heavy ? 0.85 : 0.45);
     // interrupt current attack into brief stun
@@ -1283,6 +1292,10 @@ function applyDragonPain(d, dmg, heavy, prevHp) {
       d.ai.state = 'rec'; d.ai.t = Math.max(d.ai.t, 0.55); d.ai.atk = 'stagger';
     }
   }
+  // rapid pressure (esp. dual blades) — every hit builds pin meter; locked hits build faster
+  d.pinHits = (d.pinHits || 0) + 1;
+  d.pinT = (d.pinT || 0) + (wasPinned || d.stagger > 0 ? (heavy ? 0.55 : 0.4) : (heavy ? 0.35 : 0.26));
+  tryDragonPinRoar(d);
   // crossing into low HP → limp + enrage roar
   if (!d.enraged && pct <= 0.3 && wasAbove > 0.3) {
     d.enraged = true; d.limp = true;
@@ -1298,6 +1311,59 @@ function applyDragonPain(d, dmg, heavy, prevHp) {
     d.painRoarCd = heavy ? 1.8 : 2.4;
     d.jaw.rotation.x = 0.7;
   }
+}
+
+/** When a dragon is repeatedly pinned and can't move, roar to stun the player and counter */
+function tryDragonPinRoar(d) {
+  if (!S || S.over || d.hp <= 0 || d.ai.state === 'dead') return false;
+  if ((d.pinRoarCd || 0) > 0) return false;
+  // ~1.2s of pressure or 5 rapid hits while being locked down
+  if ((d.pinT || 0) < 1.2 && (d.pinHits || 0) < 5) return false;
+
+  d.stagger = 0;
+  d.flinch = 0;
+  d.pinT = 0;
+  d.pinHits = 0;
+  d.pinRoarCd = 7.5;
+  d.hyperArmor = 1.35;
+  d.jaw.rotation.x = 0.9;
+  d.neck.rotation.x = -0.35;
+
+  // stun player 2s — open a counter window
+  applyRoarStun(d, 2.0);
+  SFX.pinRoar();
+  showMsg('咆哮！', 1.3);
+  if (S) S.camShake = Math.max(S.camShake || 0, 0.62);
+
+  // immediate aggressive counter wind-up
+  const dist = flatDist(player.position, d.root.position);
+  const pick = dist < 7 ? (Math.random() < 0.5 ? 'bite' : (Math.random() < 0.5 ? 'slamL' : 'slamR'))
+    : (d.def.legs === 'quad' ? 'charge' : (dragonElems(d.def).length ? 'breath' : 'bite'));
+  d.ai.state = 'wind';
+  d.ai.atk = pick;
+  d.ai.lastAtk = pick;
+  d.ai.hit = false;
+  d.ai.breathShots = 0;
+  d.ai.t = Math.max(0.35, (ATK[pick]?.wind || 0.8) * 0.55 * (d.def.windMul || 1));
+  $('tele').textContent = '⚠ 咆哮反擊！';
+  return true;
+}
+
+function applyRoarStun(d, dur) {
+  if (!S || S.over) return;
+  S.stunT = Math.max(S.stunT || 0, dur);
+  S.swing = 0; S.charge = -1; S.atkHold = 0; S.block = false;
+  resetCombo();
+  // shove player back so the dragon has space to swing
+  const away = tmp.copy(player.position).sub(d.root.position).setY(0);
+  if (away.lengthSq() < 0.01) away.set(-Math.sin(d.root.rotation.y), 0, -Math.cos(d.root.rotation.y));
+  away.normalize().multiplyScalar(3.2);
+  player.position.add(away);
+  pushOutObstacles(player.position, 0.7);
+  let rr = Math.hypot(player.position.x, player.position.z);
+  if (rr > ARENA) { player.position.x *= ARENA / rr; player.position.z *= ARENA / rr; }
+  player.position.y = sampleHeight(player.position.x, player.position.z);
+  showMsg('被咆哮震懾！', 1.6);
 }
 
 function severTail(d) {
@@ -1639,20 +1705,31 @@ function updateOneDragon(d, dt, t) {
   let walk = 0;
   d.jaw.rotation.x = Math.max(0, d.jaw.rotation.x - dt * 2);
   if (d.painRoarCd > 0) d.painRoarCd -= dt;
+  if (d.pinRoarCd > 0) d.pinRoarCd -= dt;
+  if (d.hyperArmor > 0) d.hyperArmor -= dt;
   if (d.flinch > 0) { d.flinch -= dt; root.rotation.z = Math.sin(t * 28) * 0.12; root.rotation.x = Math.sin(t * 20) * 0.06; }
   else { root.rotation.z *= 0.9; root.rotation.x *= 0.9; }
   if (d.stagger > 0) {
     d.stagger -= dt;
-    // brief stun — hold still in pain pose
-    d.neck.rotation.x = lerp(d.neck.rotation.x, 0.45, 1 - Math.exp(-dt * 6));
-    d.jaw.rotation.x = Math.max(d.jaw.rotation.x, 0.55);
-    root.rotation.z = Math.sin(t * 18) * 0.1;
-    if (ai.state !== 'dead' && ai.state !== 'fly') {
-      ai.state = 'rec'; ai.t = Math.max(ai.t, 0.2); ai.atk = 'stagger';
+    // stuck under hits — pin pressure builds even without new hits
+    d.pinT = (d.pinT || 0) + dt;
+    if (tryDragonPinRoar(d)) {
+      // roared free — fall through into normal AI this frame
+    } else {
+      // brief stun — hold still in pain pose
+      d.neck.rotation.x = lerp(d.neck.rotation.x, 0.45, 1 - Math.exp(-dt * 6));
+      d.jaw.rotation.x = Math.max(d.jaw.rotation.x, 0.55);
+      root.rotation.z = Math.sin(t * 18) * 0.1;
+      if (ai.state !== 'dead' && ai.state !== 'fly') {
+        ai.state = 'rec'; ai.t = Math.max(ai.t, 0.2); ai.atk = 'stagger';
+      }
+      animateDragonPose(d, dt, t, 0);
+      root.position.y = sampleHeight(root.position.x, root.position.z) + d.flyY;
+      return;
     }
-    animateDragonPose(d, dt, t, 0);
-    root.position.y = sampleHeight(root.position.x, root.position.z) + d.flyY;
-    return;
+  } else if ((d.pinT || 0) > 0 && d.hyperArmor <= 0) {
+    d.pinT = Math.max(0, d.pinT - dt * 0.9);
+    if (d.pinT <= 0) d.pinHits = 0;
   }
 
   ai.t -= dt;
@@ -2003,19 +2080,32 @@ function updatePlayer(dt) {
   const w = WEAPONS[run.weapon];
   S.cd -= dt; S.invuln -= dt; S.dodgeT -= dt; S.hurtT -= dt; S.swing -= dt;
   if (S.comboWin > 0) S.comboWin -= dt;
+  if (S.stunT > 0) S.stunT -= dt;
   const press = attackPressed();
   const spPress = specialPressed();
   let mx = input.mx + pad.mx + ((keys.KeyD || keys.ArrowRight ? 1 : 0) - (keys.KeyA || keys.ArrowLeft ? 1 : 0));
   let mz = input.mz + pad.mz + ((keys.KeyS || keys.ArrowDown ? 1 : 0) - (keys.KeyW || keys.ArrowUp ? 1 : 0));
   const ml = Math.hypot(mx, mz); if (ml > 1) { mx /= ml; mz /= ml; }
   const specialHeld = input.special || pad.special;
-  const inCombo = S.combo > 0 || S.swing > 0 || S.comboWin > 0;
+  const stunned = S.stunT > 0;
+  const inCombo = !stunned && (S.combo > 0 || S.swing > 0 || S.comboWin > 0);
   const cy = Math.cos(camYaw), sy = Math.sin(camYaw);
   const dir = new THREE.Vector3(-mx * cy - mz * sy, 0, mx * sy - mz * cy);
   let speed = S.ps.spd * w.speedMul * (S.debuffs.slow > 0 ? 0.75 : 1);
   if (S.charge >= 0 || S.block) speed *= 0.35;
   if (S.drinkT > 0) speed *= 0.3;
   if (S.swing > 0) speed *= 0.55;
+  // roar stun: freeze controls so the dragon can counter
+  if (stunned) {
+    input.dodge = false; input.potion = false;
+    S.block = false; S.charge = -1; S.atkHold = 0; S.moveAmt = 0;
+    S.swing = 0; resetCombo();
+    player.position.y = sampleHeight(player.position.x, player.position.z);
+    if (!specialHeld && S.dodgeT <= 0) S.st = Math.min(S.ps.maxSt, S.st + 28 * dt);
+    $('tele').textContent = `⚠ 震懾 ${S.stunT.toFixed(1)}s`;
+    animatePlayer(dt);
+    return;
+  }
   const tryMove = (from, moveVec, dist) => {
     const p = { x: from.x + moveVec.x * dist, z: from.z + moveVec.z * dist };
     pushOutObstacles(p, 0.7);
@@ -2137,6 +2227,14 @@ function animatePlayer(dt) {
   if (wpn === 'gs') { pose.shR = [-0.55, 0.35, -0.65]; pose.shL = [-0.7, -0.35, 0.75]; pose.elR = -1.35; pose.elL = -1.4; pose.handR = [0.55, 0, 0.1]; pose.torso = [0.08, 0, 0.05]; }
   else if (wpn === 'ss') { pose.shR = [-0.35, 0.1, 0.25]; pose.shL = [-0.85, 0, 0.55]; pose.elR = -0.55; pose.elL = -1.15; pose.handL = [0, -0.4, 0]; }
   else if (wpn === 'db') { pose.shR = [-0.45, 0.2, 0.55]; pose.shL = [-0.45, -0.2, -0.55]; pose.elR = pose.elL = -0.35; pose.handR = [0.2, 0, 0]; pose.handL = [0.2, 0, 0]; pose.torso = [0.05, 0, 0.08]; }
+  // roar stun: reeling pose, can't act
+  if (S.stunT > 0) {
+    const shake = Math.sin(performance.now() / 40) * 0.08;
+    pose.shR = [-1.6 + shake, 0.3, -0.6]; pose.shL = [-1.6 - shake, -0.3, 0.6];
+    pose.elR = -0.8; pose.elL = -0.8; pose.handR = [0.2, 0, 0]; pose.handL = [0.2, 0, 0];
+    pose.torso = [-0.45, shake * 2, 0]; pose.hipL = -0.35; pose.knL = 0.55; pose.hipR = 0.4; pose.knR = 0.4;
+    pose.bob = -0.05;
+  }
   // Guard: GS braces the greatsword; SnS raises the shield
   if (S.block) {
     if (wpn === 'gs') {
@@ -2301,11 +2399,13 @@ function hud() {
   else if (S.comboRoute) pot += ` · ${S.comboRoute.replace(/A/g, '斬').replace(/S/g, '技')}`;
   else if (S.combo > 1) pot += ` · 連擊 ${S.combo}`;
   if (S.atkBoostT > 0) pot += ` · 攻↑`;
+  if (S.stunT > 0) pot += ` · 震懾`;
   $('pot').textContent = pot;
   // debuff / buff icons
   const db = $('debuffs');
   if (db) {
     const bits = [];
+    if (S.stunT > 0) bits.push(`<div class="db" style="color:#ff8080;border-color:#ff8080aa">震懾 ${S.stunT.toFixed(1)}s</div>`);
     if (S.atkBoostT > 0) bits.push(`<div class="db" style="color:#ffb040;border-color:#ffb040aa">攻↑ ${S.atkBoostT.toFixed(1)}s</div>`);
     if (S.debuffs.poison > 0) bits.push(`<div class="db" style="color:#8d8">毒 ${S.debuffs.poison.toFixed(1)}s</div>`);
     if (S.debuffs.slow > 0) bits.push(`<div class="db" style="color:#8cf">緩 ${S.debuffs.slow.toFixed(1)}s</div>`);
@@ -2412,7 +2512,7 @@ window.__hunt = {
   pad, pollGamepad, WEAPONS, COMBOS, COMBO_TREE, sampleHeight, OBSTACLES, COLOR_DEFS, SFX, BGM, nearestDragon, beginComboHit, beginComboRoute, resetCombo,
   get PIXEL_SCALE() { return PIXEL_SCALE; }, pStats, DB_ATK_BUFF_T, DB_ATK_BUFF_MUL,
   goTitle, spawnTitleDragon, hurtPlayer, ensureAudio, spawnProjectile, pickAtk, dragonElems,
-  doHit, spawnHitBurst, spawnDmgNumber, applyDragonPain, beginComboHit, severTail, animatePlayer, buildWeapon,
+  doHit, spawnHitBurst, spawnDmgNumber, applyDragonPain, tryDragonPinRoar, applyRoarStun, beginComboHit, severTail, animatePlayer, buildWeapon,
   takeoffWindBlast, spawnWindBlastVfx, spawnChargeDust, ATK,
   get muted() { return muted; }, get bgmMuted() { return bgmMuted; }, get bgmMode() { return bgmMode; },
   get projectiles() { return projectiles; }, get effects() { return effects; }, get floaters() { return floaters; },
