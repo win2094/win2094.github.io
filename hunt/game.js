@@ -272,6 +272,13 @@ for (const o of OBSTACLES) {
 // ---------- player ----------
 const player = new THREE.Group();
 const armorMat = std(0x406080), skinMat = std(0xe0b090), leatherMat = std(0x5a3a22), metalMat = std(0x8890a0);
+[armorMat, skinMat, leatherMat, metalMat].forEach(m => { m.emissive = new THREE.Color(0x000000); m.emissiveIntensity = 1; });
+const playerFlashMats = [
+  { m: armorMat, base: 0x406080 },
+  { m: skinMat, base: 0xe0b090 },
+  { m: leatherMat, base: 0x5a3a22 },
+  { m: metalMat, base: 0x8890a0 },
+];
 const limb = (r1, r2, len, mat, parent) => { const m = new THREE.Mesh(new THREE.CylinderGeometry(r1, r2, len, 8), mat); m.position.y = -len / 2; parent.add(m); return m; };
 const joint = (parent, x, y, z) => { const g = new THREE.Group(); g.position.set(x, y, z); parent.add(g); return g; };
 const rig = joint(player, 0, 1.0, 0);           // pivot at hips, used for the roll
@@ -427,12 +434,52 @@ function generateEncounter(fight) {
   return defs;
 }
 
-// ---------- audio (richer SFX, mute-aware) ----------
-let actx = null, muted = false;
+// ---------- audio (SFX + procedural BGM, mute-aware) ----------
+let actx = null, muted = false, bgmMuted = false, audioReady = false;
+const BGM_VOL = 0.28;
+let bgmMaster = null, bgmMode = 'off', bgmNext = 0, bgmStep = 0, bgmIntense = false;
+let victoryUntil = 0;
+
+function ensureAudio() {
+  try {
+    actx = actx || new (window.AudioContext || window.webkitAudioContext)();
+    if (actx.state === 'suspended') actx.resume();
+    if (!bgmMaster) {
+      bgmMaster = actx.createGain();
+      bgmMaster.gain.value = 0;
+      bgmMaster.connect(actx.destination);
+      applyBgmGain(true);
+    }
+    audioReady = true;
+  } catch (e) { }
+}
+function unlockAudio() {
+  ensureAudio();
+  if (audioReady && bgmMode === 'off') BGM.menu();
+}
+['pointerdown', 'keydown', 'touchstart'].forEach(ev =>
+  addEventListener(ev, unlockAudio, { once: true, capture: true })
+);
+
+function applyBgmGain(instant = false) {
+  if (!bgmMaster || !actx) return;
+  const v = (muted || bgmMuted || bgmMode === 'off') ? 0 : BGM_VOL;
+  const t = actx.currentTime;
+  bgmMaster.gain.cancelScheduledValues(t);
+  if (instant) bgmMaster.gain.setValueAtTime(v, t);
+  else { bgmMaster.gain.setValueAtTime(bgmMaster.gain.value, t); bgmMaster.gain.linearRampToValueAtTime(v, t + 0.35); }
+}
+function refreshMuteUI() {
+  $('mute').textContent = muted ? '🔇 靜' : '🔊 聲';
+  $('bgm').textContent = bgmMuted ? '🎵 關' : '🎵 樂';
+}
+$('mute').onclick = () => { muted = !muted; refreshMuteUI(); applyBgmGain(); ensureAudio(); };
+$('bgm').onclick = () => { bgmMuted = !bgmMuted; refreshMuteUI(); applyBgmGain(); ensureAudio(); if (!bgmMuted && bgmMode === 'off') BGM.menu(); };
+
 function snd(freq, dur = 0.12, type = 'square', vol = 0.15, slide = 0) {
   if (muted) return;
   try {
-    actx = actx || new AudioContext();
+    ensureAudio();
     const o = actx.createOscillator(), g = actx.createGain();
     o.type = type; o.frequency.value = freq;
     if (slide) o.frequency.exponentialRampToValueAtTime(Math.max(30, freq + slide), actx.currentTime + dur);
@@ -443,7 +490,7 @@ function snd(freq, dur = 0.12, type = 'square', vol = 0.15, slide = 0) {
 function noiseBurst(dur, vol, freq = 400) {
   if (muted) return;
   try {
-    actx = actx || new AudioContext();
+    ensureAudio();
     const n = actx.createBuffer(1, actx.sampleRate * dur, actx.sampleRate);
     const d = n.getChannelData(0);
     for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * Math.exp(-i / d.length * 5);
@@ -470,7 +517,140 @@ const SFX = {
   lose: () => snd(120, 0.6, 'sawtooth', 0.14, -80),
   foot: () => snd(90, 0.05, 'triangle', 0.04),
 };
-$('mute').onclick = () => { muted = !muted; $('mute').textContent = muted ? '🔇 靜' : '🔊 聲'; };
+
+// MH-style hunting BGM: taiko/drums + low brass ostinato + heroic melody; calmer menu loop
+const NOTE = { C2: 65.41, D2: 73.42, E2: 82.41, F2: 87.31, G2: 98.00, A2: 110, Bb2: 116.54, C3: 130.81, D3: 146.83, E3: 164.81, F3: 174.61, G3: 196, A3: 220, Bb3: 233.08, C4: 261.63, D4: 293.66, E4: 329.63, F4: 349.23, G4: 392, A4: 440, Bb4: 466.16, C5: 523.25 };
+function bgmTone(freq, when, dur, type, vol, dest) {
+  if (!actx || !freq) return;
+  const o = actx.createOscillator(), g = actx.createGain();
+  o.type = type; o.frequency.setValueAtTime(freq, when);
+  g.gain.setValueAtTime(0.0001, when);
+  g.gain.exponentialRampToValueAtTime(vol, when + 0.02);
+  g.gain.exponentialRampToValueAtTime(0.0001, when + Math.max(0.05, dur));
+  o.connect(g).connect(dest); o.start(when); o.stop(when + dur + 0.05);
+}
+function bgmDrum(when, kind, dest) {
+  if (!actx) return;
+  const o = actx.createOscillator(), g = actx.createGain();
+  const f0 = kind === 'taiko' ? 90 : kind === 'tom' ? 140 : 55;
+  o.type = 'sine'; o.frequency.setValueAtTime(f0, when);
+  o.frequency.exponentialRampToValueAtTime(35, when + (kind === 'taiko' ? 0.22 : 0.12));
+  g.gain.setValueAtTime(kind === 'taiko' ? 0.55 : 0.35, when);
+  g.gain.exponentialRampToValueAtTime(0.0001, when + (kind === 'taiko' ? 0.28 : 0.14));
+  o.connect(g).connect(dest);
+  o.start(when); o.stop(when + 0.35);
+  // noise snap
+  const n = actx.createBuffer(1, actx.sampleRate * 0.08, actx.sampleRate);
+  const d = n.getChannelData(0);
+  for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * Math.exp(-i / d.length * 8);
+  const src = actx.createBufferSource(), f = actx.createBiquadFilter(), ng = actx.createGain();
+  f.type = 'lowpass'; f.frequency.value = kind === 'taiko' ? 400 : 800;
+  ng.gain.setValueAtTime(kind === 'taiko' ? 0.22 : 0.12, when);
+  ng.gain.exponentialRampToValueAtTime(0.0001, when + 0.08);
+  src.buffer = n; src.connect(f).connect(ng).connect(dest); src.start(when);
+}
+function scheduleBgmBar(when, mode, intense) {
+  if (!bgmMaster || muted || bgmMuted) return;
+  const bus = bgmMaster;
+  if (mode === 'menu') {
+    const beat = 0.55;
+    const pad = [NOTE.C3, NOTE.G3, NOTE.Bb3, NOTE.F3];
+    for (let i = 0; i < 4; i++) {
+      const t = when + i * beat;
+      bgmTone(pad[i], t, beat * 1.1, 'triangle', 0.07, bus);
+      bgmTone(pad[i] * 0.5, t, beat * 1.1, 'sine', 0.05, bus);
+      if (i % 2 === 0) bgmDrum(t, 'soft', bus);
+    }
+    const mel = [NOTE.G4, 0, NOTE.F4, NOTE.D4, NOTE.C4, 0, NOTE.Bb3, NOTE.C4];
+    mel.forEach((f, i) => { if (f) bgmTone(f, when + i * beat * 0.5, beat * 0.45, 'sine', 0.06, bus); });
+    return 4 * beat;
+  }
+  if (mode === 'victory') {
+    const notes = [NOTE.C4, NOTE.E4, NOTE.G4, NOTE.C5, NOTE.G4, NOTE.C5];
+    notes.forEach((f, i) => {
+      const t = when + i * 0.18;
+      bgmTone(f, t, 0.35, 'square', 0.12, bus);
+      bgmTone(f * 0.5, t, 0.4, 'triangle', 0.08, bus);
+    });
+    bgmDrum(when, 'taiko', bus); bgmDrum(when + 0.36, 'taiko', bus);
+    return 1.4;
+  }
+  // battle / intense — driving hunting theme
+  const bpm = intense ? 148 : 118;
+  const beat = 60 / bpm;
+  const bars = 2;
+  // taiko pattern
+  for (let b = 0; b < bars * 4; b++) {
+    const t = when + b * beat;
+    if (b % 4 === 0) bgmDrum(t, 'taiko', bus);
+    else if (b % 4 === 2) bgmDrum(t, 'tom', bus);
+    else if (intense && (b % 4 === 1 || b % 4 === 3)) bgmDrum(t + beat * 0.5, 'soft', bus);
+    if (intense && b % 2 === 0) bgmDrum(t + beat * 0.5, 'tom', bus);
+  }
+  // low brass ostinato
+  const ost = intense
+    ? [NOTE.C2, NOTE.C2, NOTE.G2, NOTE.Bb2, NOTE.C2, 155.56, NOTE.F2, NOTE.G2]
+    : [NOTE.C2, NOTE.C2, NOTE.G2, NOTE.G2, NOTE.Bb2, NOTE.Bb2, NOTE.F2, NOTE.F2];
+  ost.forEach((f, i) => {
+    const t = when + i * beat;
+    bgmTone(f, t, beat * 0.95, 'sawtooth', intense ? 0.1 : 0.07, bus);
+    bgmTone(f * 1.5, t, beat * 0.9, 'triangle', intense ? 0.05 : 0.035, bus);
+  });
+  // heroic melody (C minor hunting rise)
+  const mel = intense
+    ? [NOTE.C4, 311.13, NOTE.G4, NOTE.Bb4, NOTE.G4, NOTE.F4, 311.13, NOTE.C4,
+      NOTE.D4, NOTE.F4, NOTE.G4, NOTE.Bb4, NOTE.C5, NOTE.Bb4, NOTE.G4, NOTE.F4]
+    : [NOTE.C4, 0, NOTE.G4, 0, NOTE.Bb4, NOTE.G4, NOTE.F4, 0,
+      311.13, NOTE.F4, NOTE.G4, 0, NOTE.Bb3, NOTE.C4, NOTE.D4, 311.13];
+  mel.forEach((f, i) => {
+    if (!f) return;
+    const t = when + i * (beat * 0.5);
+    bgmTone(f, t, beat * 0.42, 'square', intense ? 0.09 : 0.065, bus);
+    bgmTone(f * 2, t, beat * 0.3, 'triangle', 0.03, bus);
+  });
+  if (intense) {
+    bgmTone(NOTE.G4, when, bars * 4 * beat, 'sine', 0.025, bus);
+    bgmTone(NOTE.C5, when + beat * 2, bars * 2 * beat, 'sine', 0.02, bus);
+  }
+  return bars * 4 * beat;
+}
+function tickBgm() {
+  if (!audioReady || !actx || !bgmMaster) return;
+  if (bgmMode === 'off' || muted || bgmMuted) return;
+  const now = actx.currentTime;
+  if (bgmMode === 'victory' && victoryUntil && now > victoryUntil) {
+    BGM.menu();
+    return;
+  }
+  if (now + 0.15 < bgmNext) return;
+  const mode = bgmMode === 'battle' && bgmIntense ? 'intense' : bgmMode;
+  const dur = scheduleBgmBar(Math.max(now + 0.05, bgmNext), mode === 'intense' ? 'battle' : mode, mode === 'intense' || bgmIntense);
+  bgmNext = Math.max(now + 0.05, bgmNext) + (dur || 1);
+  bgmStep++;
+}
+const BGM = {
+  set(mode) {
+    ensureAudio();
+    if (!audioReady) return;
+    if (mode === bgmMode && mode !== 'victory') return;
+    bgmMode = mode;
+    bgmNext = actx ? actx.currentTime + 0.05 : 0;
+    bgmStep = 0;
+    if (mode === 'victory') victoryUntil = (actx?.currentTime || 0) + 2.2;
+    else victoryUntil = 0;
+    applyBgmGain();
+    tickBgm();
+  },
+  menu() { bgmIntense = false; BGM.set('menu'); },
+  battle() { bgmIntense = false; BGM.set('battle'); },
+  victory() { BGM.set('victory'); },
+  off() { bgmMode = 'off'; applyBgmGain(); },
+  setIntense(on) {
+    if (bgmIntense === !!on) return;
+    bgmIntense = !!on;
+    if (bgmMode === 'battle') { /* pattern flips on next bar */ }
+  },
+};
 
 
 // ---------- procedural dragon mesh ----------
@@ -613,6 +793,7 @@ function showPreview(defs) {
   ['title', 'stats', 'over'].forEach(id => $(id).classList.add('hidden'));
   $('preview').classList.remove('hidden');
   $('help')?.classList.add('hidden');
+  BGM.menu();
 }
 
 function startFight(defs) {
@@ -637,7 +818,7 @@ function startFight(defs) {
   S = {
     ps, hp: ps.maxHp, st: ps.maxSt, potions: 3, cd: 0, swing: 0, swingDur: 0, charge: -1, block: false, dodgeT: 0, invuln: 0, drinkT: 0, hurtT: 0,
     combo: 0, comboStep: 0, atkBuf: false, comboWin: 0, comboId: '',
-    debuffs: { poison: 0, slow: 0, dark: 0 }, camShake: 0, over: false, introT: 2.0, winPending: false,
+    debuffs: { poison: 0, slow: 0, dark: 0 }, camShake: 0, hitFlash: 0, hurtFx: 0, over: false, introT: 2.0, winPending: false,
   };
   $('dname').textContent = list.length > 1 ? `第${run.fight + 1}戰：${list.length} 龍` : `第${run.fight + 1}戰：${primary.def.name}`;
   $('dtraits').textContent = list.length > 1 ? list.map(d => d.traits).join(' ｜ ') : primary.def.traits;
@@ -646,6 +827,8 @@ function startFight(defs) {
   ['title', 'stats', 'over', 'preview'].forEach(id => $(id).classList.add('hidden'));
   $('help')?.classList.add('hidden');
   SFX.roar();
+  BGM.battle();
+  BGM.setIntense(list.length > 1);
 }
 
 let msgT = 0;
@@ -782,7 +965,7 @@ function pollGamepad(dt) {
   if (optNow && !padPrev.options) goTitle();
   padPrev.options = optNow;
   const shareNow = gpBtn(gp, 8);
-  if (shareNow && !padPrev.share) { muted = !muted; $('mute').textContent = muted ? '🔇 靜' : '🔊 聲'; }
+  if (shareNow && !padPrev.share) { muted = !muted; refreshMuteUI(); applyBgmGain(); }
   padPrev.share = shareNow;
 }
 
@@ -799,6 +982,7 @@ function goTitle() {
   $('title').classList.remove('hidden');
   $('help')?.classList.remove('hidden');
   spawnTitleDragon();
+  BGM.menu();
 }
 document.querySelectorAll('#title button').forEach(b => b.onclick = () => {
   run.weapon = b.dataset.w; run.fight = 0; run.pts = 0;
@@ -810,6 +994,7 @@ $('restart').onclick = () => goTitle();
 $('oagain').onclick = () => { $('over').classList.add('hidden'); showPreview(generateEncounter(run.fight)); };
 function showStats() {
   $('stats').classList.remove('hidden');
+  BGM.menu();
   const render = () => {
     $('spts').textContent = `可分配點數：${run.pts}`;
     $('slist').innerHTML = '';
@@ -844,18 +1029,60 @@ function hurtPlayer(amount, src, opts = {}) {
   let dmg = amount * dmgMul * S.ps.def * (d && d.severed ? 0.75 : 1);
   const toSrc = Math.atan2(src.x - player.position.x, src.z - player.position.z);
   const facing = Math.abs(((toSrc - player.rotation.y + Math.PI * 3) % (Math.PI * 2)) - Math.PI) < 1.2;
-  if (S.block && facing && S.st > 0) { dmg *= 0.15; S.st -= 20; snd(900, 0.08, 'triangle'); showMsg('格擋！', 0.6); }
+  let blocked = false;
+  if (S.block && facing && S.st > 0) { dmg *= 0.15; S.st -= 20; blocked = true; snd(900, 0.08, 'triangle'); showMsg('格擋！', 0.6); }
   else { SFX.hit(); S.hurtT = 0.4; }
   S.hp -= dmg; S.invuln = 0.55; S.drinkT = 0;
+  // brief hit feedback — shake scales with damage, red flash a couple of blinks
+  const shake = blocked ? Math.min(0.18, 0.06 + dmg * 0.008) : Math.min(0.42, 0.1 + dmg * 0.012);
+  S.camShake = Math.max(S.camShake, shake);
+  if (!blocked) {
+    S.hitFlash = Math.max(S.hitFlash || 0, 0.32);
+    S.hurtFx = Math.max(S.hurtFx || 0, Math.min(0.35, 0.12 + dmg * 0.01));
+  }
   if (opts.poison) S.debuffs.poison = Math.max(S.debuffs.poison, 5);
   if (opts.slow) S.debuffs.slow = Math.max(S.debuffs.slow, 4);
   if (opts.dark) { S.debuffs.dark = Math.max(S.debuffs.dark, 3.5); S.camShake = Math.max(S.camShake, 0.45); SFX.blast(); }
   const away = tmp.copy(player.position).sub(src).setY(0);
   if (away.lengthSq() > 0.01) { away.normalize().multiplyScalar(dmg > 10 ? 2.5 : 1); player.position.add(away); }
   if (S.hp <= 0) {
-    S.hp = 0; S.over = true; SFX.lose();
+    S.hp = 0; S.over = true; SFX.lose(); BGM.menu();
     setTimeout(() => { $('otitle').textContent = '狩獵失敗'; $('otext').textContent = '龍太強喇…'; $('over').classList.remove('hidden'); }, 1000);
   }
+}
+
+function updateHitFlash(dt) {
+  if (!S) {
+    playerFlashMats.forEach(({ m, base }) => {
+      m.color.setHex(base); m.emissive.setHex(0x000000); m.emissiveIntensity = 1;
+    });
+    const hf = $('hurtflash'); if (hf) hf.style.opacity = '0';
+    return;
+  }
+  if (S.hitFlash > 0) S.hitFlash -= dt;
+  if (S.hurtFx > 0) S.hurtFx -= dt;
+  if (S.camShake > 0) S.camShake = Math.max(0, S.camShake - dt * 2.8); // brief decay
+  // ~3 red blinks over the hitFlash window (on/off steps)
+  const elapsed = Math.max(0, 0.32 - S.hitFlash);
+  const blink = S.hitFlash > 0 && (Math.floor(elapsed * 14) % 2 === 0);
+  const drink = S.drinkT > 0 && S.hitFlash <= 0;
+  playerFlashMats.forEach(({ m, base }) => {
+    if (blink) {
+      m.color.setHex(0xc03030);
+      m.emissive.setHex(0xff4040);
+      m.emissiveIntensity = 1.6;
+    } else if (drink) {
+      m.color.setHex(base);
+      m.emissive.setHex(0x224422);
+      m.emissiveIntensity = 1;
+    } else {
+      m.color.setHex(base);
+      m.emissive.setHex(0x000000);
+      m.emissiveIntensity = 1;
+    }
+  });
+  const hf = $('hurtflash');
+  if (hf) hf.style.opacity = S.hurtFx > 0 ? String(Math.min(0.65, 0.22 + S.hurtFx * 1.4)) : '0';
 }
 
 function doHit(mult, label, rangeMul = 1) {
@@ -899,7 +1126,7 @@ function doHit(mult, label, rangeMul = 1) {
     bestD.hp = 0; bestD.ai.state = 'dead'; bestD.ai.t = 2;
     SFX.roar();
     if (livingDragons().length === 0 && !S.over) {
-      S.over = true; S.winPending = true; SFX.win();
+      S.over = true; S.winPending = true; SFX.win(); BGM.victory();
       showMsg('狩獵成功！', 2.5);
       setTimeout(() => {
         run.pts += 5 + (dragons.length > 1 ? 3 : 0);
@@ -1202,11 +1429,10 @@ function updateDebuffs(dt) {
     S.debuffs.poison -= dt;
     S.hp -= 6 * dt * S.ps.def;
     if (Math.random() < dt * 2) SFX.poisonTick();
-    if (S.hp <= 0 && !S.over) { S.hp = 0; S.over = true; SFX.lose(); setTimeout(() => { $('otitle').textContent = '狩獵失敗'; $('otext').textContent = '中毒身亡…'; $('over').classList.remove('hidden'); }, 800); }
+    if (S.hp <= 0 && !S.over) { S.hp = 0; S.over = true; SFX.lose(); BGM.menu(); setTimeout(() => { $('otitle').textContent = '狩獵失敗'; $('otext').textContent = '中毒身亡…'; $('over').classList.remove('hidden'); }, 800); }
   }
   if (S.debuffs.slow > 0) S.debuffs.slow -= dt;
   if (S.debuffs.dark > 0) S.debuffs.dark -= dt;
-  if (S.camShake > 0) S.camShake -= dt;
 }
 
 
@@ -1318,7 +1544,6 @@ function updatePlayer(dt) {
 
   if (!specialHeld && !S.block && S.dodgeT <= 0 && S.charge < 0) S.st = Math.min(S.ps.maxSt, S.st + 28 * dt);
   animatePlayer(dt);
-  pBody.material.emissive.setHex(S.invuln > 0 && S.hurtT > 0 ? 0x553333 : S.drinkT > 0 ? 0x335533 : 0);
 }
 
 const ROLL_T = 0.5, ROLL_DIST = 11.5; // ~1.8× prior distance to match faster walk
@@ -1441,16 +1666,26 @@ function hud() {
   const vig = $('vignette');
   if (vig) vig.style.opacity = S.debuffs.dark > 0 ? '0.55' : '0';
 }
+function syncBgmIntensity() {
+  if (!S || S.over || bgmMode !== 'battle') return;
+  const alive = livingDragons();
+  const multi = dragons.length > 1;
+  const enraged = alive.some(d => d.hp / d.maxHp < 0.35);
+  BGM.setIntense(multi || enraged);
+}
 function frame() {
   requestAnimationFrame(frame);
   const dt = Math.min(clock.getDelta(), 0.05); time += dt;
   pollGamepad(dt);
+  tickBgm();
+  updateHitFlash(dt);
   if (S) {
     if (!S.over) {
       if (S.introT > 0) S.introT -= dt;
       else { updateDragons(dt, time); updateProjectiles(dt); }
       updatePlayer(dt);
       updateDebuffs(dt);
+      syncBgmIntensity();
     } else {
       updateDragons(dt, time);
     }
@@ -1497,6 +1732,7 @@ frame();
 window.__hunt = {
   run, get S() { return S; }, player, get dragons() { return dragons; }, get living() { return livingDragons(); },
   startFight, showPreview, generateEncounter, generateDragon, playerPower, estimatePower,
-  pad, pollGamepad, COMBOS, sampleHeight, OBSTACLES, COLOR_DEFS, SFX, nearestDragon, beginComboHit, resetCombo, PIXEL_SCALE, pStats,
-  goTitle, spawnTitleDragon,
+  pad, pollGamepad, COMBOS, sampleHeight, OBSTACLES, COLOR_DEFS, SFX, BGM, nearestDragon, beginComboHit, resetCombo, PIXEL_SCALE, pStats,
+  goTitle, spawnTitleDragon, hurtPlayer, ensureAudio,
+  get muted() { return muted; }, get bgmMuted() { return bgmMuted; }, get bgmMode() { return bgmMode; },
 };

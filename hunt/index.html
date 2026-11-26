@@ -26,6 +26,7 @@ canvas{display:block;position:fixed;inset:0;width:100%!important;height:100%!imp
 #debuffs{position:absolute;left:max(12px,env(safe-area-inset-left));top:max(120px,calc(env(safe-area-inset-top) + 110px));display:flex;flex-direction:column;gap:6px;font-size:22px;font-weight:700;text-shadow:0 2px 4px #000}
 #debuffs .db{padding:4px 10px;border-radius:8px;background:#0009;border:2px solid #fff5}
 #vignette{position:fixed;inset:0;pointer-events:none;z-index:8;opacity:0;transition:opacity .2s;background:radial-gradient(circle at center,transparent 40%,#000 100%)}
+#hurtflash{position:fixed;inset:0;pointer-events:none;z-index:9;opacity:0;background:radial-gradient(circle at center,transparent 48%,#e0282866 78%,#a01010aa 100%)}
 #touch{position:absolute;inset:0;pointer-events:none;z-index:3;touch-action:none}
 #stick{position:absolute;left:max(16px,env(safe-area-inset-left));bottom:max(20px,calc(env(safe-area-inset-bottom) + 12px));width:min(42vw,200px);height:min(42vw,200px);min-width:120px;min-height:120px;border-radius:50%;background:#fff2;border:3px solid #fff5;pointer-events:auto;touch-action:none}
 #knob{position:absolute;left:50%;top:50%;width:36%;height:36%;margin-left:-18%;margin-top:-18%;border-radius:50%;background:#fff6;transform:translate(0,0)}
@@ -76,10 +77,11 @@ canvas{display:block;position:fixed;inset:0;width:100%!important;height:100%!imp
 <div id="hud">
   <div id="ptop"><div class="lbl" id="pname">獵人</div><div class="bar"><div id="php" style="background:#3c3;width:100%"></div></div><div class="bar" style="height:18px;margin-top:6px"><div id="pst" style="background:#fc3;width:100%"></div></div><div class="lbl" id="pot">藥水 ×3</div></div>
   <div id="dtop"><div class="lbl" id="dname">龍</div><div class="bar"><div id="dhp" style="background:#d33;width:100%;margin-left:auto"></div></div><div class="lbl" id="tail">尾：完好</div><div class="lbl" id="dtraits" style="font-size:18px;opacity:.85"></div></div>
-  <div id="btns"><button class="sb" id="mute">🔊 聲</button><button class="sb" id="restart">↻ 重新</button></div>
+  <div id="btns"><button class="sb" id="mute">🔊 聲</button><button class="sb" id="bgm">🎵 樂</button><button class="sb" id="restart">↻ 重新</button></div>
   <div id="debuffs"></div>
   <div id="tele"></div><div id="msg"></div>
   <div id="vignette"></div>
+  <div id="hurtflash"></div>
   <div id="padstatus">手掣已連接</div>
   <div id="help">鍵：WASD移動 · 滑鼠視角 · J連擊 · K技 · 空白翻滾 · Q藥<br>手掣：左搖桿移動 · 右搖桿視角 · ✕/R1連擊 · ○翻滾 · L1技 · △藥</div>
   <div id="touch" class="hidden"><div id="stick"><div id="knob"></div></div>
