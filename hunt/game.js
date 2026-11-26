@@ -36,7 +36,14 @@ const run = { weapon: 'gs', fight: 0, pts: 0, stats: { hp: 0, atk: 0, def: 0, st
 const STAT_NAMES = { hp: '體力', atk: '攻擊', def: '防禦', sta: '耐力', spd: '速度' };
 
 // ---------- three setup (pixel-art 3D: low-res RT + nearest upscale) ----------
-const PIXEL_SCALE = 4;
+// finer pixels: ~1/2 on desktop, slightly chunkier on small screens — still pixel look
+function pixelScaleFor(w, h) {
+  const m = Math.min(w, h);
+  if (m < 420) return 2.5;
+  if (m < 720) return 2.2;
+  return 2;
+}
+let PIXEL_SCALE = 2;
 let renderer, hasWebGL = true;
 try {
   renderer = new THREE.WebGLRenderer({ antialias: false, preserveDrawingBuffer: true, powerPreference: 'high-performance' });
@@ -79,8 +86,9 @@ function viewSize() {
 let resizeTimer = 0;
 function resizeNow() {
   const { w, h } = viewSize();
-  const pw = Math.max(120, Math.floor(w / PIXEL_SCALE));
-  const ph = Math.max(80, Math.floor(h / PIXEL_SCALE));
+  PIXEL_SCALE = pixelScaleFor(w, h);
+  const pw = Math.max(160, Math.floor(w / PIXEL_SCALE));
+  const ph = Math.max(100, Math.floor(h / PIXEL_SCALE));
   if (hasWebGL && THREE.WebGLRenderTarget) {
     if (pixelRT) pixelRT.dispose();
     pixelRT = new THREE.WebGLRenderTarget(pw, ph, {
@@ -251,21 +259,29 @@ for (let i = 0; i < 16; i++) {
   p.position.set(Math.cos(a) * (ARENA + 4), 6, Math.sin(a) * (ARENA + 4)); scene.add(p);
 }
 
-const rockMat = std(0x6e675c), wallRuinMat = std(0x756b5e);
+const obstacleMeshes = []; // for camera fade (each gets its own material)
 for (const o of OBSTACLES) {
+  const baseCol = o.kind === 'rock' ? 0x6e675c : 0x756b5e;
+  const mat = new THREE.MeshLambertMaterial({ color: baseCol, flatShading: true, transparent: true, opacity: 1 });
+  o._mat = mat;
+  o._baseOpacity = 1;
+  o._fade = 0;
+  const parts = [];
   if (o.kind === 'rock') {
-    const mesh = new THREE.Mesh(new THREE.CylinderGeometry(o.r * 0.85, o.r, o.h, 6), rockMat);
+    const mesh = new THREE.Mesh(new THREE.CylinderGeometry(o.r * 0.85, o.r, o.h, 6), mat);
     mesh.position.set(o.x, sampleHeight(o.x, o.z) + o.h * 0.5, o.z);
-    scene.add(mesh);
-    const cap = new THREE.Mesh(new THREE.SphereGeometry(o.r * 0.7, 6, 4), rockMat);
+    scene.add(mesh); parts.push(mesh);
+    const cap = new THREE.Mesh(new THREE.BoxGeometry(o.r * 1.2, o.r * 0.7, o.r * 1.2), mat);
     cap.position.set(o.x, sampleHeight(o.x, o.z) + o.h * 0.85, o.z);
-    scene.add(cap);
+    scene.add(cap); parts.push(cap);
   } else {
-    const mesh = new THREE.Mesh(new THREE.BoxGeometry(o.w, o.h, o.r * 2), wallRuinMat);
+    const mesh = new THREE.Mesh(new THREE.BoxGeometry(o.w, o.h, o.r * 2), mat);
     mesh.position.set(o.x, sampleHeight(o.x, o.z) + o.h * 0.5, o.z);
     mesh.rotation.y = o.yaw;
-    scene.add(mesh);
+    scene.add(mesh); parts.push(mesh);
   }
+  o._meshes = parts;
+  obstacleMeshes.push(...parts);
 }
 
 
@@ -675,80 +691,129 @@ function patternTex(def) {
 function buildDragon(def) {
   const root = new THREE.Group();
   const skin = new THREE.MeshLambertMaterial({ map: patternTex(def), flatShading: true });
-  const belly = std(def.belly), hornMat = std(0xe0d8c0), dark = std(def.accent);
-  const mk = (geo, mat, x, y, z, parent = root) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); parent.add(m); return m; };
+  const belly = std(def.belly), hornMat = std(0xe8e0c8), dark = std(def.accent), clawMat = std(0x2a2420);
+  const mk = (geo, mat, x, y, z, parent = root, sx = 1, sy = 1, sz = 1) => {
+    const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); m.scale.set(sx, sy, sz); parent.add(m); return m;
+  };
   const biped = def.legs === 'biped';
-  // body
-  const bodyY = biped ? 3.6 : 2.8;
-  const body = mk(new THREE.SphereGeometry(1, 10, 8), skin, 0, bodyY, 0);
-  body.scale.set(biped ? 1.6 : 2.0, biped ? 2.2 : 1.6, biped ? 2.2 : 3.2);
-  mk(new THREE.SphereGeometry(1, 8, 6), belly, 0, bodyY - 0.5, biped ? 0.2 : 0.3).scale.set(biped ? 1.2 : 1.5, biped ? 1.4 : 1.1, biped ? 1.6 : 2.6);
-  // neck + head
-  const neck = new THREE.Group(); neck.position.set(0, bodyY + (biped ? 1.2 : 0.9), biped ? 1.4 : 2.4); root.add(neck);
-  mk(new THREE.CylinderGeometry(0.55, 0.9, biped ? 2.0 : 2.4, 8), skin, 0, 0.6, biped ? 0.5 : 0.9, neck).rotation.x = biped ? 0.6 : 1.0;
-  const head = new THREE.Group(); head.position.set(0, biped ? 1.4 : 1.5, biped ? 1.5 : 2.2); neck.add(head);
-  mk(new THREE.BoxGeometry(1.2, 0.95, 1.7), skin, 0, 0, 0.3, head);
-  mk(new THREE.BoxGeometry(0.9, 0.45, 1.2), skin, 0, -0.1, 1.4, head);
-  const jaw = mk(new THREE.BoxGeometry(0.85, 0.28, 1.4), dark, 0, -0.5, 1.0, head);
-  [-1, 1].forEach(s => mk(new THREE.SphereGeometry(0.12, 6, 5), std(0xffee40), 0.45 * s, 0.2, 0.7, head));
-  if (def.horns) {
-    [[0.4, 0.45, -0.2, 0.18, 1.4, -0.8, 0.5], [0.55, 0.3, 0.1, 0.12, 0.9, -0.3, 0.9]].forEach(([x, y, z, r, len, rx, rz]) => {
-      [-1, 1].forEach(s => { const h = mk(new THREE.ConeGeometry(r, len, 6), hornMat, x * s, y + len * 0.25, z, head); h.rotation.set(rx, 0, -rz * s); });
-    });
+  // hunched muscular body — faceted boxes, not spheres (exaggerated silhouette)
+  const bodyY = biped ? 4.0 : 3.1;
+  const chest = mk(new THREE.BoxGeometry(1, 1, 1), skin, 0, bodyY + 0.45, biped ? 0.2 : 0.7, root, biped ? 2.35 : 2.7, biped ? 2.15 : 1.75, biped ? 2.2 : 3.1);
+  chest.rotation.x = biped ? -0.35 : -0.18; // deep menacing hunch
+  mk(new THREE.BoxGeometry(1, 1, 1), belly, 0, bodyY - 0.2, biped ? 0.5 : 0.95, root, biped ? 1.6 : 1.85, biped ? 1.25 : 1.05, biped ? 1.6 : 2.4);
+  // shoulders / scapula plates — wide & high
+  [-1, 1].forEach(s => {
+    const sh = mk(new THREE.BoxGeometry(1.15, 0.85, 1.25), dark, 1.35 * s, bodyY + 1.05, biped ? -0.05 : 0.25, root);
+    sh.rotation.z = -0.45 * s; sh.rotation.x = -0.2;
+  });
+  // tall dorsal spines / plates along back
+  for (let i = 0; i < 7; i++) {
+    const plate = mk(new THREE.BoxGeometry(0.14, 1.25 - i * 0.1, 0.65), dark, 0, bodyY + 1.65 - i * 0.04, (biped ? 1.0 : 1.8) - i * 0.6);
+    plate.rotation.x = -0.25;
   }
-  // legs
-  const legs = [];
-  if (biped) {
-    [[-0.55, 0.3], [0.55, 0.3]].forEach(([x, z]) => {
-      const g = new THREE.Group(); g.position.set(x, bodyY - 0.4, z); root.add(g);
-      mk(new THREE.CylinderGeometry(0.38, 0.32, 2.2, 6), skin, 0, -1.1, 0, g);
-      mk(new THREE.BoxGeometry(0.7, 0.28, 1.0), dark, 0, -2.2, 0.15, g); legs.push(g);
+  // long S-curved neck (segmented boxes)
+  const neck = new THREE.Group(); neck.position.set(0, bodyY + (biped ? 1.35 : 1.0), biped ? 1.7 : 2.8); root.add(neck);
+  mk(new THREE.BoxGeometry(1.05, 0.95, 1.25), skin, 0, 0.2, 0.15, neck).rotation.x = 0.45;
+  mk(new THREE.BoxGeometry(0.9, 0.8, 1.35), skin, 0, 0.75, 1.1, neck).rotation.x = 0.65;
+  mk(new THREE.BoxGeometry(0.78, 0.68, 1.2), skin, 0, 1.35, 2.05, neck).rotation.x = 0.4;
+  mk(new THREE.BoxGeometry(0.7, 0.55, 0.9), skin, 0, 1.7, 2.85, neck).rotation.x = 0.2;
+  // wedge head + brow ridges + jaw
+  const head = new THREE.Group(); head.position.set(0, biped ? 1.95 : 2.05, biped ? 3.35 : 3.85); neck.add(head);
+  mk(new THREE.BoxGeometry(1.55, 0.95, 1.65), skin, 0, 0.15, 0.1, head); // cranium
+  mk(new THREE.BoxGeometry(1.15, 0.6, 1.85), skin, 0, -0.02, 1.45, head); // long snout wedge
+  mk(new THREE.BoxGeometry(0.75, 0.4, 0.85), skin, 0, -0.05, 2.55, head); // tip
+  // brow ridges
+  [-1, 1].forEach(s => {
+    const brow = mk(new THREE.BoxGeometry(0.45, 0.28, 0.7), dark, 0.48 * s, 0.48, 0.35, head);
+    brow.rotation.z = -0.4 * s; brow.rotation.x = -0.25;
+  });
+  const jaw = mk(new THREE.BoxGeometry(0.85, 0.28, 1.55), dark, 0, -0.48, 1.2, head);
+  // fangs
+  [-1, 1].forEach(s => mk(new THREE.BoxGeometry(0.1, 0.28, 0.12), clawMat, 0.28 * s, -0.55, 1.85, head));
+  // glowing slit eyes
+  [-1, 1].forEach(s => mk(new THREE.BoxGeometry(0.14, 0.1, 0.08), std(0xffee40), 0.42 * s, 0.22, 0.85, head));
+  if (def.horns) {
+    // large sharp swept-back horns (boxes) — readable at range
+    [-1, 1].forEach(s => {
+      const h1 = mk(new THREE.BoxGeometry(0.32, 2.1, 0.32), hornMat, 0.5 * s, 1.25, -0.25, head);
+      h1.rotation.set(-0.85, 0, -0.5 * s);
+      const h2 = mk(new THREE.BoxGeometry(0.2, 1.2, 0.2), hornMat, 0.75 * s, 0.7, 0.4, head);
+      h2.rotation.set(-0.35, 0, -1.0 * s);
     });
   } else {
-    [[-1.3, 1.4], [1.3, 1.4], [-1.4, -1.5], [1.4, -1.5]].forEach(([x, z]) => {
-      const g = new THREE.Group(); g.position.set(x, bodyY - 0.2, z); root.add(g);
-      mk(new THREE.CylinderGeometry(0.4, 0.32, 2.2, 6), skin, 0, -1.1, 0, g);
-      mk(new THREE.BoxGeometry(0.7, 0.25, 0.9), dark, 0, -2.2, 0.15, g); legs.push(g);
+    // small brow spikes even without big horns — keeps head angular
+    [-1, 1].forEach(s => {
+      const sp = mk(new THREE.BoxGeometry(0.16, 0.55, 0.16), dark, 0.4 * s, 0.7, -0.1, head);
+      sp.rotation.set(-0.5, 0, -0.35 * s);
     });
   }
-  // wings
+  // clawed limbs — thick thighs, boxy segments
+  const legs = [];
+  const addLeg = (x, z, front) => {
+    const g = new THREE.Group(); g.position.set(x, bodyY - (front ? 0.15 : 0.35), z); root.add(g);
+    // thigh
+    mk(new THREE.BoxGeometry(0.75, 1.35, 0.85), skin, 0, -0.55, 0, g);
+    // shin
+    mk(new THREE.BoxGeometry(0.55, 1.2, 0.6), dark, 0, -1.55, 0.05, g);
+    // foot + claws
+    mk(new THREE.BoxGeometry(0.85, 0.28, 1.15), clawMat, 0, -2.2, 0.25, g);
+    [-0.28, 0, 0.28].forEach(cx => mk(new THREE.BoxGeometry(0.12, 0.12, 0.4), clawMat, cx, -2.28, 0.75, g));
+    legs.push(g);
+  };
+  if (biped) {
+    addLeg(-0.7, 0.15, true); addLeg(0.7, 0.15, true);
+  } else {
+    addLeg(-1.25, 1.35, true); addLeg(1.25, 1.35, true);
+    addLeg(-1.35, -1.4, false); addLeg(1.35, -1.4, false);
+  }
+  // membrane wings with finger bones
   const wings = [];
   if (def.wings) {
+    const wingMat = new THREE.MeshLambertMaterial({ color: def.belly, side: THREE.DoubleSide, transparent: true, opacity: 0.8, flatShading: true });
     [-1, 1].forEach(s => {
-      const g = new THREE.Group(); g.position.set(1.2 * s, bodyY + 0.8, 0.4); root.add(g);
-      mk(new THREE.CylinderGeometry(0.12, 0.16, 3.8, 5), dark, 1.8 * s, 0.5, 0, g).rotation.z = -1.15 * s;
-      const wgeo = new THREE.BufferGeometry();
-      wgeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array([
-        0, 0, 0, 3.6 * s, 1.2, 0, 2.8 * s, -0.9, -2.8,
-      ]), 3));
-      wgeo.setIndex([0, 1, 2]);
-      wgeo.computeVertexNormals();
-      mk(wgeo, new THREE.MeshLambertMaterial({ color: def.belly, side: THREE.DoubleSide, transparent: true, opacity: 0.85, flatShading: true }), 0, 0, 0, g);
+      const g = new THREE.Group(); g.position.set(1.35 * s, bodyY + 1.0, 0.2); root.add(g);
+      // arm bone
+      const arm = mk(new THREE.BoxGeometry(0.22, 0.22, 2.6), dark, 1.1 * s, 0.35, -0.2, g);
+      arm.rotation.z = -1.05 * s; arm.rotation.x = -0.25;
+      // finger bones
+      [[2.4, 1.1, -0.3], [2.8, 0.2, -1.2], [2.2, -0.7, -2.0]].forEach(([fx, fy, fz], fi) => {
+        const bone = mk(new THREE.BoxGeometry(0.1, 0.1, 1.8 - fi * 0.2), dark, fx * s * 0.55, fy, fz * 0.5, g);
+        bone.rotation.z = -0.9 * s; bone.rotation.x = -0.15 - fi * 0.2;
+      });
+      // membrane panels (faceted triangles as thin boxes)
+      const mem1 = mk(new THREE.BoxGeometry(2.8, 0.06, 2.2), wingMat, 1.5 * s, 0.2, -0.9, g);
+      mem1.rotation.z = -0.85 * s; mem1.rotation.x = -0.35;
+      const mem2 = mk(new THREE.BoxGeometry(2.2, 0.06, 1.8), wingMat, 1.3 * s, -0.35, -1.8, g);
+      mem2.rotation.z = -0.7 * s; mem2.rotation.x = -0.55;
       wings.push(g);
     });
   }
-  // tail
-  const tailBase = new THREE.Group(); tailBase.position.set(0, bodyY - 0.2, biped ? -1.6 : -2.8); root.add(tailBase);
+  // long tapered spiked tail ending in a blade
+  const tailBase = new THREE.Group(); tailBase.position.set(0, bodyY - 0.35, biped ? -1.5 : -2.5); root.add(tailBase);
   let parent = tailBase; const tailSegs = []; let tailCut = null;
-  const segs = 5;
+  const segs = 6;
   for (let i = 0; i < segs; i++) {
-    const g = new THREE.Group(); g.position.z = i === 0 ? 0 : -1.35; parent.add(g);
-    const r = 0.7 * (1 - i / (segs + 1));
-    mk(new THREE.CylinderGeometry(r * 0.75, r, 1.5, 8), skin, 0, 0, -0.7, g).rotation.x = Math.PI / 2;
+    const g = new THREE.Group(); g.position.z = i === 0 ? 0 : -1.2; parent.add(g);
+    const w = 0.85 * (1 - i / (segs + 0.5));
+    mk(new THREE.BoxGeometry(w, w * 0.85, 1.35), skin, 0, 0, -0.65, g);
+    // top spikes
+    if (i < 5) mk(new THREE.BoxGeometry(0.1, 0.55 - i * 0.06, 0.35), dark, 0, w * 0.55, -0.5, g);
     tailSegs.push(g); parent = g; if (i === 1) tailCut = g;
   }
-  mk(new THREE.SphereGeometry(0.55, 8, 6), dark, 0, 0, -1.5, parent);
-  for (let k = 0; k < 4; k++) mk(new THREE.ConeGeometry(0.18, 0.7, 5), dark, 0, bodyY + 1.4 - Math.abs(k - 1.5) * 0.1, 0.6 - k * 0.7);
+  // blade tip
+  const blade = mk(new THREE.BoxGeometry(0.15, 0.7, 1.2), dark, 0, 0, -1.4, parent);
+  blade.rotation.y = 0.15;
 
-  // scale: size is multiple of player height; base mesh ~6 units tall
-  const scale = (def.size * PLAYER_H) / 6;
+  // scale: size is multiple of player height; base mesh ~6.5 units tall
+  const scale = (def.size * PLAYER_H) / 6.5;
   root.scale.setScalar(scale);
   scene.add(root);
   return {
     def, root, head, neck, jaw, legs, wings, tailBase, tailSegs, tailCut,
-    scale, bodyR: 2.8 * scale, headR: 1.4 * scale, flyY: 0,
+    scale, bodyR: 2.6 * scale, headR: 1.5 * scale, flyY: 0,
     hp: def.hp, maxHp: def.hp, tailHp: def.hp * 0.22, severed: false, flinch: 0,
-    ai: { state: 'idle', t: 1.8 + Math.random(), atk: null, dir: new THREE.Vector3(), hit: false, lastAtk: '', phase: 0 },
+    stuckT: 0, lastPos: new THREE.Vector3(), steerSide: Math.random() < 0.5 ? 1 : -1,
+    ai: { state: 'idle', t: 1.2 + Math.random(), atk: null, dir: new THREE.Vector3(), hit: false, lastAtk: '', phase: 0, breathShots: 0, goal: null },
   };
 }
 
@@ -1160,9 +1225,22 @@ function spawnSpark(p, col) {
 
 function spawnProjectile(origin, dir, kind, dmg) {
   const col = ELEM_COL[kind] || 0xffffff;
-  const mesh = new THREE.Mesh(new THREE.SphereGeometry(kind === 'blast' ? 0.7 : 0.45, 6, 5), new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.75 }));
+  let mesh;
+  if (kind === 'lightning') {
+    mesh = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.35, 1.2), new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.9 }));
+  } else if (kind === 'blast') {
+    mesh = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.9, 0.9), new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.8 }));
+  } else if (kind === 'poison') {
+    mesh = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.55, 0.55), new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.85 }));
+  } else {
+    mesh = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.5, 0.85), new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.9 }));
+  }
   mesh.position.copy(origin); scene.add(mesh);
-  projectiles.push({ mesh, v: dir.clone().normalize().multiplyScalar(kind === 'blast' ? 16 : 20), t: 1.4, kind, dmg, hit: false });
+  const spd = kind === 'blast' ? 15 : kind === 'lightning' ? 24 : 18;
+  const v = dir.clone().normalize().multiplyScalar(spd);
+  projectiles.push({ mesh, v, t: 1.8, kind, dmg, hit: false });
+  // muzzle flash spark
+  spawnSpark(origin.clone(), col);
   if (kind === 'fire') SFX.fire();
   else if (kind === 'poison') SFX.poison();
   else if (kind === 'lightning') SFX.lightning();
@@ -1171,48 +1249,109 @@ function spawnProjectile(origin, dir, kind, dmg) {
 
 // ---------- dragon AI ----------
 const ATK = {
-  bite:    { name: '咬！', wind: 1.2, act: 0.38, rec: 1.0, range: 8 },
-  slamL:   { name: '左撞！', wind: 1.3, act: 0.5, rec: 1.1, range: 7 },
-  slamR:   { name: '右撞！', wind: 1.3, act: 0.5, rec: 1.1, range: 7 },
-  tail:    { name: '甩尾！', wind: 1.4, act: 0.7, rec: 1.2, range: 10 },
-  charge:  { name: '衝撞！', wind: 1.55, act: 1.25, rec: 1.45, range: 40 },
-  breath:  { name: '吐息！', wind: 1.6, act: 1.0, rec: 1.3, range: 22 },
+  bite:    { name: '咬！', wind: 1.05, act: 0.38, rec: 0.85, range: 8 },
+  slamL:   { name: '左撞！', wind: 1.15, act: 0.5, rec: 0.95, range: 7 },
+  slamR:   { name: '右撞！', wind: 1.15, act: 0.5, rec: 0.95, range: 7 },
+  tail:    { name: '甩尾！', wind: 1.25, act: 0.7, rec: 1.0, range: 10 },
+  charge:  { name: '衝撞！', wind: 1.35, act: 1.25, rec: 1.25, range: 40 },
+  breath:  { name: '吐息！', wind: 1.1, act: 1.35, rec: 1.15, range: 28 },
   takeoff: { name: '起飛！', wind: 0.9, act: 0.8, rec: 0.4, range: 99 },
   dive:    { name: '俯衝！', wind: 1.2, act: 1.1, rec: 1.2, range: 99 },
 };
 
 function idleCd(def) {
-  const lo = 1.4 + (1 - def.aggro) * 1.1;
-  const hi = 2.1 + (1 - def.aggro) * 1.3;
+  const lo = 0.9 + (1 - def.aggro) * 0.7;
+  const hi = 1.5 + (1 - def.aggro) * 0.9;
   return lo + Math.random() * (hi - lo);
+}
+
+function dragonElems(def) {
+  return def.colors.map(c => COLOR_DEFS[c].elem).filter(Boolean);
 }
 
 function pickAtk(d, dist, ang) {
   const def = d.def;
   const behind = Math.abs(ang) > 1.7;
   const side = Math.abs(ang) > 0.9 && Math.abs(ang) < 1.7;
-  const elems = def.colors.map(c => COLOR_DEFS[c].elem).filter(Boolean);
+  const elems = dragonElems(def);
+  const canBreath = elems.length > 0;
   let pick;
-  if (def.legs === 'biped') {
-    if (behind && dist < 11) pick = 'tail';
-    else if (side && dist < 8) pick = ang > 0 ? 'slamR' : 'slamL';
-    else if (dist < 7) pick = 'bite';
-    else if (elems.length && dist < 18 && Math.random() < 0.45) pick = 'breath';
-    else if (dist < 10) pick = Math.random() < 0.5 ? 'bite' : (ang > 0 ? 'slamR' : 'slamL');
-    else pick = elems.length ? 'breath' : 'bite';
-  } else {
-    if (behind && dist < 12) pick = 'tail';
-    else if (dist < 8 && Math.random() < 0.35) pick = 'tail';
-    else if (elems.length && dist > 8 && dist < 20 && Math.random() < 0.4) pick = 'breath';
-    else pick = 'charge';
+  // coloured dragons: breathe often at mid/long range
+  if (canBreath && dist >= 6 && dist <= 26) {
+    const breathChance = dist > 12 ? 0.72 : 0.55;
+    if (Math.random() < breathChance && d.ai.lastAtk !== 'breath') pick = 'breath';
   }
-  if (def.wings && d.ai.state === 'idle' && dist > 6 && Math.random() < 0.22 + def.aggro * 0.15 && d.ai.lastAtk !== 'dive') {
+  if (!pick) {
+    if (def.legs === 'biped') {
+      if (behind && dist < 11) pick = 'tail';
+      else if (side && dist < 8) pick = ang > 0 ? 'slamR' : 'slamL';
+      else if (dist < 6.5) pick = 'bite';
+      else if (canBreath) pick = 'breath';
+      else if (dist < 10) pick = Math.random() < 0.5 ? 'bite' : (ang > 0 ? 'slamR' : 'slamL');
+      else pick = 'bite';
+    } else {
+      if (behind && dist < 12) pick = 'tail';
+      else if (canBreath && dist >= 7) pick = 'breath';
+      else if (dist < 9 && Math.random() < 0.3) pick = 'tail';
+      else pick = 'charge';
+    }
+  }
+  // wings: occasional takeoff, but don't steal breath
+  if (def.wings && pick !== 'breath' && dist > 8 && dist < 16 && Math.random() < 0.14 + def.aggro * 0.1
+    && d.ai.lastAtk !== 'dive' && d.ai.lastAtk !== 'takeoff') {
     pick = 'takeoff';
   }
-  if (pick === d.ai.lastAtk && pick !== 'charge') {
-    pick = pick === 'bite' ? 'tail' : pick === 'breath' ? (def.legs === 'quad' ? 'charge' : 'bite') : 'bite';
+  // avoid repeating same melee; never cancel breath into melee just for variety
+  if (pick === d.ai.lastAtk && pick !== 'charge' && pick !== 'breath') {
+    if (canBreath && dist >= 7) pick = 'breath';
+    else pick = pick === 'bite' ? 'tail' : 'bite';
   }
   return pick;
+}
+
+/** Sample whether a point (with radius) is blocked; returns push vector length */
+function blockedAt(x, z, radius) {
+  const p = { x, z };
+  pushOutObstacles(p, radius);
+  return Math.hypot(p.x - x, p.z - z);
+}
+
+/** Steer toward a world XZ target while sliding around obstacles */
+function steerMove(d, wantX, wantZ, speed, dt) {
+  const root = d.root;
+  const radius = 2.2 * d.scale;
+  const dx = wantX - root.position.x, dz = wantZ - root.position.z;
+  const len = Math.hypot(dx, dz) || 1;
+  let fx = dx / len, fz = dz / len;
+  // probe ahead + left/right
+  const look = 3.5 + d.scale;
+  const ahead = blockedAt(root.position.x + fx * look, root.position.z + fz * look, radius);
+  if (ahead > 0.05) {
+    const lx = -fz, lz = fx; // left perpendicular
+    const leftClear = blockedAt(root.position.x + (fx * 0.4 + lx * d.steerSide) * look, root.position.z + (fz * 0.4 + lz * d.steerSide) * look, radius);
+    const rightClear = blockedAt(root.position.x + (fx * 0.4 - lx * d.steerSide) * look, root.position.z + (fz * 0.4 - lz * d.steerSide) * look, radius);
+    if (leftClear < rightClear) { fx = fx * 0.35 + lx * d.steerSide; fz = fz * 0.35 + lz * d.steerSide; }
+    else { fx = fx * 0.35 - lx * d.steerSide; fz = fz * 0.35 - lz * d.steerSide; d.steerSide *= -1; }
+    const n = Math.hypot(fx, fz) || 1; fx /= n; fz /= n;
+  }
+  const before = { x: root.position.x, z: root.position.z };
+  root.position.x += fx * speed * dt;
+  root.position.z += fz * speed * dt;
+  pushOutObstacles(root.position, radius);
+  const moved = Math.hypot(root.position.x - before.x, root.position.z - before.z);
+  // stuck detection
+  if (moved < speed * dt * 0.15 && speed > 0.5) d.stuckT += dt;
+  else d.stuckT = Math.max(0, d.stuckT - dt * 0.5);
+  if (d.stuckT > 1.0) {
+    d.steerSide *= -1;
+    d.stuckT = 0;
+    // sidestep burst
+    root.position.x += -fz * d.steerSide * 2.5;
+    root.position.z += fx * d.steerSide * 2.5;
+    pushOutObstacles(root.position, radius);
+    d.ai.goal = null; // repath
+  }
+  return moved;
 }
 
 function updateOneDragon(d, dt, t) {
@@ -1254,18 +1393,42 @@ function updateOneDragon(d, dt, t) {
   }
 
   if (ai.state === 'idle') {
-    const diff = turn(wantYaw, 1.5 * def.speed);
-    const chase = (def.legs === 'quad' ? 4.2 : 3.4) + def.aggro * 2;
-    if (dist > 9) { root.position.addScaledVector(fwd, chase * def.speed * dt); walk = 1; if (Math.random() < dt * 2) SFX.foot(); }
+    const diff = turn(wantYaw, 1.8 * def.speed);
+    // positioning: close in, circle/flank, or retreat to breath range
+    const elems = dragonElems(def);
+    const ideal = elems.length ? 12 : (def.legs === 'quad' ? 8 : 6);
+    if (!ai.goal || Math.random() < dt * 0.4) {
+      const side = d.steerSide;
+      if (dist > ideal + 4) {
+        ai.goal = { x: player.position.x, z: player.position.z }; // chase
+      } else if (dist < ideal - 3 && elems.length) {
+        // retreat to breath range
+        const bx = root.position.x - toP.x / (dist || 1) * 8;
+        const bz = root.position.z - toP.z / (dist || 1) * 8;
+        ai.goal = { x: bx, z: bz };
+      } else {
+        // circle / flank
+        const ang = Math.atan2(root.position.x - player.position.x, root.position.z - player.position.z) + side * 0.7;
+        ai.goal = { x: player.position.x + Math.sin(ang) * ideal, z: player.position.z + Math.cos(ang) * ideal };
+      }
+    }
+    const spd = ((def.legs === 'quad' ? 5.2 : 4.2) + def.aggro * 2.2) * def.speed;
+    if (ai.goal) {
+      const gd = Math.hypot(ai.goal.x - root.position.x, ai.goal.z - root.position.z);
+      if (gd > 1.2) {
+        steerMove(d, ai.goal.x, ai.goal.z, spd, dt);
+        walk = 1;
+        if (Math.random() < dt * 2) SFX.foot();
+      }
+    }
     if (ai.t <= 0) {
       const pick = pickAtk(d, dist, diff);
-      ai.atk = pick; ai.lastAtk = pick;
+      ai.atk = pick; ai.lastAtk = pick; ai.breathShots = 0;
       if (pick === 'takeoff') {
         ai.state = 'wind'; ai.t = ATK.takeoff.wind; ai.hit = false; SFX.flap();
       } else {
         ai.state = 'wind'; ai.t = ATK[pick].wind * def.windMul; ai.hit = false;
-        if (pick === 'charge' || pick === 'roar') SFX.roar();
-        else SFX.roar();
+        SFX.roar();
       }
     }
   } else if (ai.state === 'wind') {
@@ -1275,16 +1438,17 @@ function updateOneDragon(d, dt, t) {
       d.jaw.rotation.x = 0.3;
       if (ai.t <= 0) { ai.state = 'fly'; ai.t = 2.2 + Math.random() * 1.2; d.flyY = 0; }
     } else {
-      if (ai.atk !== 'tail' && ai.atk !== 'slamL' && ai.atk !== 'slamR' && ai.t > A.wind * def.windMul * 0.3) turn(wantYaw, 1.6);
+      if (ai.atk !== 'tail' && ai.atk !== 'slamL' && ai.atk !== 'slamR') turn(wantYaw, 2.2);
       if (ai.atk === 'bite') d.neck.rotation.x = -0.4;
       if (ai.atk === 'tail') { root.rotation.y -= dt * 0.3; d.tailBase.rotation.y = 0.85; }
       if (ai.atk === 'slamL') root.rotation.y -= dt * 0.5;
       if (ai.atk === 'slamR') root.rotation.y += dt * 0.5;
       if (ai.atk === 'charge') { root.position.y = sampleHeight(root.position.x, root.position.z) + Math.abs(Math.sin(t * 10)) * 0.1; d.jaw.rotation.x = 0.35; }
-      if (ai.atk === 'breath') { d.neck.rotation.x = -0.55; d.jaw.rotation.x = 0.4; }
+      if (ai.atk === 'breath') { d.neck.rotation.x = -0.45; d.jaw.rotation.x = 0.55; }
       if (ai.atk === 'dive') { d.neck.rotation.x = 0.5; }
       if (ai.t <= 0) {
         ai.state = 'act'; ai.t = A.act; ai.dir.copy(fwd);
+        ai.breathShots = 0;
         if (ai.atk === 'charge') SFX.stomp();
       }
     }
@@ -1293,13 +1457,14 @@ function updateOneDragon(d, dt, t) {
     const hornBonus = def.horns ? 1.3 : 1;
     if (ai.atk === 'bite') {
       d.neck.rotation.x = 0.45; d.jaw.rotation.x = 0.55;
-      root.position.addScaledVector(ai.dir, 5 * dt);
+      steerMove(d, root.position.x + ai.dir.x * 4, root.position.z + ai.dir.z * 4, 6, dt);
       const hp = worldPos(d.head);
       if (!ai.hit && flatDist(hp, player.position) < 2.6 * d.scale + 0.5) { ai.hit = true; hurtPlayer(18, hp); }
     } else if (ai.atk === 'slamL' || ai.atk === 'slamR') {
       const side = ai.atk === 'slamL' ? 1 : -1;
       root.rotation.y += side * dt * 2.2;
-      root.position.addScaledVector(new THREE.Vector3(Math.cos(root.rotation.y), 0, -Math.sin(root.rotation.y)).multiplyScalar(side), 6 * dt);
+      const sx = Math.cos(root.rotation.y) * side, sz = -Math.sin(root.rotation.y) * side;
+      steerMove(d, root.position.x + sx * 4, root.position.z + sz * 4, 7, dt);
       if (!ai.hit && dist < 4.5 * d.scale) { ai.hit = true; hurtPlayer(16, root.position); SFX.stomp(); }
     } else if (ai.atk === 'tail') {
       root.rotation.y += (Math.PI * 2 / A.act) * dt; d.tailBase.rotation.y = -0.5;
@@ -1309,39 +1474,52 @@ function updateOneDragon(d, dt, t) {
         if (flatDist(tip, player.position) < 2.8 * d.scale) { ai.hit = true; hurtPlayer(22, root.position); }
       }
     } else if (ai.atk === 'charge') {
-      const spd = 18 * def.speed * hornBonus;
-      root.position.addScaledVector(ai.dir, spd * dt); walk = 2;
+      const spd = 17 * def.speed * hornBonus;
+      const before = { x: root.position.x, z: root.position.z };
+      // charge with steering so rocks don't hard-stop forever
+      steerMove(d, root.position.x + ai.dir.x * 10, root.position.z + ai.dir.z * 10, spd, dt);
+      walk = 2;
       if (Math.random() < dt * 4) SFX.stomp();
       if (!ai.hit && dist < 3.5 * d.scale) { ai.hit = true; hurtPlayer(28 * hornBonus, root.position); }
-      const before = { x: root.position.x, z: root.position.z };
-      pushOutObstacles(root.position, 2.5 * d.scale);
-      if (Math.abs(root.position.x - before.x) + Math.abs(root.position.z - before.z) > 0.02) {
-        ai.state = 'rec'; ai.t = 1.6; showMsg('撞石！', 0.6); SFX.stomp();
+      const moved = Math.hypot(root.position.x - before.x, root.position.z - before.z);
+      if (moved < spd * dt * 0.2) {
+        ai.state = 'rec'; ai.t = 1.1; showMsg('撞石！', 0.5); SFX.stomp(); d.steerSide *= -1;
       }
     } else if (ai.atk === 'breath') {
-      d.neck.rotation.x = -0.15; d.jaw.rotation.x = 0.55;
-      const mouth = worldPos(d.head).addScaledVector(fwd, 1.5 * d.scale);
-      if (ai.t > A.act * 0.5 && Math.random() < 0.08) {
-        const elems = def.colors.map(c => COLOR_DEFS[c].elem).filter(Boolean);
-        const kind = elems[Math.floor(Math.random() * elems.length)] || 'fire';
-        spawnProjectile(mouth, ai.dir.clone().setY(-0.05), kind, 12);
+      // keep facing player and fire a clear volley
+      turn(wantYaw, 2.8);
+      d.neck.rotation.x = -0.2; d.jaw.rotation.x = 0.65;
+      const elapsed = A.act - ai.t;
+      const elems = dragonElems(def);
+      // 3 reliable shots at 0.15s, 0.45s, 0.75s
+      const schedule = [0.15, 0.45, 0.75];
+      while (ai.breathShots < schedule.length && elapsed >= schedule[ai.breathShots]) {
+        const kind = elems[ai.breathShots % elems.length] || elems[0] || 'fire';
+        const mouth = worldPos(d.head);
+        mouth.y += 0.4 * d.scale;
+        const aim = tmp2.copy(player.position).sub(mouth);
+        aim.y = (player.position.y + 1.2) - mouth.y;
+        if (aim.lengthSq() < 0.01) aim.set(Math.sin(root.rotation.y), -0.05, Math.cos(root.rotation.y));
+        spawnProjectile(mouth, aim, kind, 14);
+        showMsg(kind === 'fire' ? '火球！' : kind === 'poison' ? '毒液！' : kind === 'lightning' ? '雷球！' : '暗爆！', 0.45);
+        ai.breathShots++;
       }
     } else if (ai.atk === 'dive') {
       d.flyY = Math.max(0, d.flyY - dt * 14);
       root.position.y = sampleHeight(root.position.x, root.position.z) + d.flyY;
-      root.position.addScaledVector(ai.dir, 14 * dt);
-      turn(wantYaw, 0.8);
+      steerMove(d, player.position.x, player.position.z, 14, dt);
+      turn(wantYaw, 1.2);
       if (!ai.hit && d.flyY < 2.5 && dist < 4 * d.scale) { ai.hit = true; hurtPlayer(26, root.position); SFX.stomp(); }
       if (d.flyY <= 0.1) { ai.t = 0; d.flyY = 0; }
     }
     if (ai.t <= 0) {
       if (ai.atk === 'dive') { ai.state = 'rec'; ai.t = ATK.dive.rec; d.flyY = 0; }
-      else { ai.state = 'rec'; ai.t = A.rec * (1.05 + (1 - def.aggro) * 0.2); }
+      else { ai.state = 'rec'; ai.t = A.rec * (1.0 + (1 - def.aggro) * 0.15); }
     }
   } else if (ai.state === 'rec') {
-    if (ai.atk === 'charge') root.position.addScaledVector(ai.dir, Math.max(0, ai.t) * 5 * dt);
+    if (ai.atk === 'charge') steerMove(d, root.position.x + ai.dir.x * 3, root.position.z + ai.dir.z * 3, Math.max(0, ai.t) * 4, dt);
     d.neck.rotation.x *= 0.9;
-    if (ai.t <= 0) { ai.state = 'idle'; ai.t = idleCd(def); }
+    if (ai.t <= 0) { ai.state = 'idle'; ai.t = idleCd(def); ai.goal = null; }
   }
 
   // arena + height (when not flying high)
@@ -1405,16 +1583,24 @@ function updateDragons(dt, t) {
 function updateProjectiles(dt) {
   for (let i = projectiles.length - 1; i >= 0; i--) {
     const p = projectiles[i];
-    p.t -= dt; p.mesh.position.addScaledVector(p.v, dt); p.v.y -= 6 * dt;
-    if (!p.hit && flatDist(p.mesh.position, player.position) < 1.6) {
+    p.t -= dt;
+    p.mesh.position.addScaledVector(p.v, dt);
+    p.v.y -= (p.kind === 'lightning' ? 2 : 5) * dt;
+    if (p.v.lengthSq() > 0.01) p.mesh.lookAt(p.mesh.position.x + p.v.x, p.mesh.position.y + p.v.y, p.mesh.position.z + p.v.z);
+    if (Math.random() < dt * 8) spawnSpark(p.mesh.position.clone(), ELEM_COL[p.kind] || 0xffffff);
+    const hitR = p.kind === 'blast' ? 2.2 : 1.9;
+    const py = player.position.y + 1.1;
+    const dist3 = Math.hypot(p.mesh.position.x - player.position.x, p.mesh.position.y - py, p.mesh.position.z - player.position.z);
+    if (!p.hit && dist3 < hitR) {
       p.hit = true;
       const opts = { poison: p.kind === 'poison', slow: p.kind === 'lightning', dark: p.kind === 'blast' };
       hurtPlayer(p.dmg, p.mesh.position, opts);
       if (p.kind === 'blast') S.camShake = Math.max(S.camShake, 0.5);
+      spawnSpark(p.mesh.position.clone(), ELEM_COL[p.kind] || 0xffffff);
       scene.remove(p.mesh); projectiles.splice(i, 1); continue;
     }
     if (p.t <= 0 || p.mesh.position.y < sampleHeight(p.mesh.position.x, p.mesh.position.z) - 0.5) {
-      if (p.kind === 'blast' && !p.hit && flatDist(p.mesh.position, player.position) < 5) {
+      if (p.kind === 'blast' && !p.hit && flatDist(p.mesh.position, player.position) < 5.5) {
         hurtPlayer(p.dmg * 0.7, p.mesh.position, { dark: true });
         S.camShake = Math.max(S.camShake, 0.4);
       }
@@ -1720,6 +1906,7 @@ function frame() {
     target.z - Math.cos(camYaw) * dist * Math.cos(camPitch)
   );
   camera.lookAt(target.x, lookY, target.z);
+  updateObstacleFade(dt, target.x, lookY, target.z);
   if (msgT > 0) { msgT -= dt; if (msgT <= 0) $('msg').textContent = ''; }
   hud();
   if (hasWebGL && pixelRT) {
@@ -1727,12 +1914,37 @@ function frame() {
     renderer.setRenderTarget(null); renderer.clear(); renderer.render(blitScene, blitCam);
   } else renderer.render(scene, camera);
 }
+
+/** Fade obstacles that sit between camera and look-at (~30% opacity) */
+function updateObstacleFade(dt, lookX, lookY, lookZ) {
+  const cam = camera.position;
+  const toLookX = lookX - cam.x, toLookY = lookY - cam.y, toLookZ = lookZ - cam.z;
+  const lookLen = Math.hypot(toLookX, toLookY, toLookZ) || 1;
+  const lx = toLookX / lookLen, ly = toLookY / lookLen, lz = toLookZ / lookLen;
+  for (const o of OBSTACLES) {
+    if (!o._mat) continue;
+    // closest point on camera→player segment to obstacle center
+    const ox = o.x - cam.x, oy = (sampleHeight(o.x, o.z) + o.h * 0.5) - cam.y, oz = o.z - cam.z;
+    const t = THREE.MathUtils.clamp((ox * lx + oy * ly + oz * lz) / lookLen, 0.05, 0.92);
+    const cx = cam.x + lx * t * lookLen, cy = cam.y + ly * t * lookLen, cz = cam.z + lz * t * lookLen;
+    const rad = o.kind === 'rock' ? o.r + 1.4 : Math.max(o.w * 0.5, o.r) + 1.0;
+    const near = Math.hypot(o.x - cx, (sampleHeight(o.x, o.z) + o.h * 0.5) - cy, o.z - cz) < rad + 1.8;
+    const want = near ? 1 : 0;
+    o._fade = THREE.MathUtils.lerp(o._fade || 0, want, 1 - Math.exp(-10 * dt));
+    const opacity = THREE.MathUtils.lerp(1, 0.28, o._fade);
+    o._mat.opacity = opacity;
+    o._mat.transparent = opacity < 0.99;
+    o._mat.depthWrite = opacity > 0.85;
+  }
+}
 spawnTitleDragon();
 frame();
 window.__hunt = {
   run, get S() { return S; }, player, get dragons() { return dragons; }, get living() { return livingDragons(); },
   startFight, showPreview, generateEncounter, generateDragon, playerPower, estimatePower,
-  pad, pollGamepad, COMBOS, sampleHeight, OBSTACLES, COLOR_DEFS, SFX, BGM, nearestDragon, beginComboHit, resetCombo, PIXEL_SCALE, pStats,
-  goTitle, spawnTitleDragon, hurtPlayer, ensureAudio,
+  pad, pollGamepad, COMBOS, sampleHeight, OBSTACLES, COLOR_DEFS, SFX, BGM, nearestDragon, beginComboHit, resetCombo,
+  get PIXEL_SCALE() { return PIXEL_SCALE; }, pStats,
+  goTitle, spawnTitleDragon, hurtPlayer, ensureAudio, spawnProjectile, pickAtk, dragonElems,
   get muted() { return muted; }, get bgmMuted() { return bgmMuted; }, get bgmMode() { return bgmMode; },
+  get projectiles() { return projectiles; },
 };
