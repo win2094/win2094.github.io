@@ -4,32 +4,35 @@ const $ = id => document.getElementById(id);
 const ARENA = 38;
 
 const WEAPONS = {
-  gs: { name: '大劍', dmg: 42, cd: 0.55, range: 4.2, speedMul: 0.85, col: 0xb8bcc4 },
-  ss: { name: '單手劍', dmg: 15, cd: 0.18, range: 3.0, speedMul: 1.0, col: 0xc8ced4 },
-  db: { name: '雙刀', dmg: 8, cd: 0.12, range: 2.8, speedMul: 1.1, col: 0xd0c090 },
+  gs: { name: '大劍', dmg: 42, cd: 0.7, range: 4.4, speedMul: 0.82, col: 0xb8bcc4, canBlock: true },
+  ss: { name: '單手劍', dmg: 15, cd: 0.2, range: 3.1, speedMul: 1.0, col: 0xc8ced4, canBlock: true },
+  db: { name: '雙刀', dmg: 8, cd: 0.08, range: 2.9, speedMul: 1.18, col: 0xd0c090, canBlock: false },
 };
 // MH-style chains: press attack again in buffer window to continue
+// GS slow & weighty · SnS medium theatrical · DB fastest flurry
 const COMBOS = {
   gs: [
-    { id: 'overhead', dmg: 1.0, range: 4.2, dur: 0.72, label: null },
-    { id: 'side', dmg: 1.15, range: 4.7, dur: 0.62, label: '橫斬' },
-    { id: 'slam', dmg: 1.6, range: 5.1, dur: 0.88, label: '廣域砸！' },
+    { id: 'overhead', dmg: 1.05, range: 4.4, dur: 0.98, label: null },
+    { id: 'side', dmg: 1.2, range: 4.9, dur: 0.88, label: '橫斬' },
+    { id: 'slam', dmg: 1.75, range: 5.4, dur: 1.15, label: '廣域砸！' },
   ],
   ss: [
-    { id: 'slash', dmg: 1.0, range: 3.0, dur: 0.3, label: null },
-    { id: 'back', dmg: 1.05, range: 3.15, dur: 0.32, label: null },
-    { id: 'bash', dmg: 1.2, range: 2.85, dur: 0.36, label: '盾擊' },
-    { id: 'rising', dmg: 1.5, range: 3.45, dur: 0.46, label: '迴旋斬！' },
+    { id: 'slash', dmg: 1.0, range: 3.1, dur: 0.38, label: null },
+    { id: 'back', dmg: 1.08, range: 3.25, dur: 0.4, label: '回斬' },
+    { id: 'bash', dmg: 1.25, range: 2.95, dur: 0.44, label: '盾擊' },
+    { id: 'rising', dmg: 1.55, range: 3.55, dur: 0.58, label: '迴旋斬！' },
   ],
   db: [
-    { id: 'double', dmg: 0.95, range: 2.85, dur: 0.26, label: null },
-    { id: 'cross', dmg: 1.1, range: 3.05, dur: 0.28, label: null },
-    { id: 'flurry', dmg: 1.3, range: 3.25, dur: 0.4, label: '亂舞' },
-    { id: 'finisher', dmg: 1.65, range: 3.55, dur: 0.48, label: '終結！' },
+    { id: 'double', dmg: 0.95, range: 2.9, dur: 0.18, label: null },
+    { id: 'cross', dmg: 1.1, range: 3.1, dur: 0.2, label: null },
+    { id: 'flurry', dmg: 1.35, range: 3.35, dur: 0.32, label: '亂舞' },
+    { id: 'finisher', dmg: 1.7, range: 3.65, dur: 0.4, label: '終結！' },
   ],
 };
-const COMBO_BUFFER = 0.32; // after swing ends, still chainable
+const COMBO_BUFFER = 0.34; // after swing ends, still chainable
 const COMBO_LINK = 0.55;   // fraction of swing remaining when buffer opens
+const DB_ATK_BUFF_T = 5;   // dual blades: +ATK window after landing a hit
+const DB_ATK_BUFF_MUL = 1.4;
 
 // ---------- persistent run state ----------
 const run = { weapon: 'gs', fight: 0, pts: 0, stats: { hp: 0, atk: 0, def: 0, sta: 0, spd: 0 } };
@@ -888,7 +891,7 @@ function startFight(defs) {
   const primary = dragons[0];
   S = {
     ps, hp: ps.maxHp, st: ps.maxSt, potions: 3, cd: 0, swing: 0, swingDur: 0, charge: -1, block: false, dodgeT: 0, invuln: 0, drinkT: 0, hurtT: 0,
-    combo: 0, comboStep: 0, atkBuf: false, comboWin: 0, comboId: '',
+    combo: 0, comboStep: 0, atkBuf: false, comboWin: 0, comboId: '', atkHold: 0, atkBoostT: 0,
     debuffs: { poison: 0, slow: 0, dark: 0 }, camShake: 0, hitFlash: 0, hurtFx: 0, over: false, introT: 2.0, winPending: false,
   };
   $('dname').textContent = list.length > 1 ? `第${run.fight + 1}戰：${list.length} 龍` : `第${run.fight + 1}戰：${primary.def.name}`;
@@ -1189,9 +1192,16 @@ function doHit(mult, label, rangeMul = 1) {
   const isHeavy = mult >= 1.35 || isCharge || isFinisher;
   const isCrit = best.kind === 'head' || (isCharge && mult >= 2.2);
   let dmg = w.dmg * mult * S.ps.atk * (best.kind === 'head' ? 1.35 : 1);
+  if (S.atkBoostT > 0) dmg *= DB_ATK_BUFF_MUL;
   if (isCrit && best.kind !== 'head') dmg *= 1.15;
   const prevHp = bestD.hp;
   bestD.hp -= dmg;
+  // Dual Blades trade-off: landing hits grants +ATK for a few seconds (no block)
+  if (run.weapon === 'db') {
+    const fresh = S.atkBoostT <= 0;
+    S.atkBoostT = DB_ATK_BUFF_T;
+    if (fresh && !label) showMsg('攻↑！', 0.55);
+  }
   const impact = best.p.clone().setY(player.position.y + 1.6 + Math.random() * 0.8);
 
   // camera shake scales with damage / charged / finisher
@@ -1857,14 +1867,39 @@ function updatePlayer(dt) {
   if (input.potion) { input.potion = false; if (S.potions > 0 && S.drinkT <= 0 && S.hp < S.ps.maxHp) { S.potions--; S.drinkT = 1.0; SFX.potion(); resetCombo(); } }
   if (S.drinkT > 0) { S.drinkT -= dt; S.hp = Math.min(S.ps.maxHp, S.hp + S.ps.maxHp * 0.4 * dt); }
   const faceDragon = () => { const nd = nearestDragon(); if (!nd) return; const v = tmp.copy(nd.root.position).sub(player.position); if (v.length() < 14) player.rotation.y = Math.atan2(v.x, v.z); };
+  if (S.atkBoostT > 0) S.atkBoostT = Math.max(0, S.atkBoostT - dt);
+  const atkHeld = !!(input.attack || pad.attack);
   S.block = false;
   if (run.weapon === 'gs') {
-    if (specialHeld && S.cd <= 0 && S.swing <= 0) { if (S.charge < 0) { S.charge = 0; faceDragon(); resetCombo(); } S.charge = Math.min(1.6, S.charge + dt); }
-    else if (S.charge >= 0) { const c = S.charge; S.charge = -1; S.cd = w.cd * 1.3; S.swing = S.swingDur = 0.55; S.comboId = 'charge'; doHit(1 + c * 1.6, c > 1.2 ? '蓄力斬！' : null); resetCombo(); }
+    // GS: special = guard; hold attack from idle = charge; tap attack = combo
+    if (specialHeld && S.st > 0 && S.swing <= 0 && S.charge < 0) {
+      S.block = true; S.st -= 8 * dt; S.atkHold = 0;
+      if (S.combo > 0) resetCombo();
+    } else if (atkHeld && S.combo === 0 && S.swing <= 0 && S.cd <= 0 && S.dodgeT <= 0 && S.drinkT <= 0 && !S.block) {
+      S.atkHold += dt;
+      if (S.atkHold >= 0.32) {
+        if (S.charge < 0) { S.charge = 0; faceDragon(); resetCombo(); }
+        S.charge = Math.min(1.6, S.charge + dt);
+      }
+    } else if (S.charge >= 0) {
+      const c = S.charge; S.charge = -1; S.atkHold = 0;
+      S.cd = w.cd * 1.3; S.swing = S.swingDur = 0.78; S.comboId = 'charge';
+      doHit(1 + c * 1.6, c > 1.2 ? '蓄力斬！' : null); resetCombo();
+    } else if (!atkHeld && S.atkHold > 0 && S.atkHold < 0.32) {
+      S.atkHold = 0;
+      if (S.cd <= 0 && S.dodgeT <= 0 && S.drinkT <= 0 && S.combo === 0 && S.swing <= 0)
+        beginComboHit(0);
+    } else if (!atkHeld) {
+      S.atkHold = 0;
+    }
   } else if (run.weapon === 'ss') {
     if (specialHeld && S.st > 0 && S.swing <= 0) { S.block = true; S.st -= 8 * dt; if (S.combo > 0) resetCombo(); }
   } else if (run.weapon === 'db') {
-    if (specialHeld && S.st > 5 && S.cd <= 0 && S.swing <= 0) { faceDragon(); S.st -= 6; S.cd = 0.1; S.swing = S.swingDur = 0.3; S.comboId = 'demon'; doHit(0.9, null); resetCombo(); }
+    // Dual Blades: NO block — special is demon dash flurry
+    if (specialHeld && S.st > 5 && S.cd <= 0 && S.swing <= 0) {
+      faceDragon(); S.st -= 6; S.cd = 0.08; S.swing = S.swingDur = 0.22; S.comboId = 'demon';
+      doHit(0.95, null); resetCombo();
+    }
   }
 
   // --- combo input ---
@@ -1883,8 +1918,8 @@ function updatePlayer(dt) {
   } else if (S.combo > 0 && S.swing <= 0 && S.comboWin <= 0 && !S.atkBuf) {
     resetCombo();
   }
-  // fresh chain
-  if (press && S.swing <= 0 && S.comboWin <= 0 && S.dodgeT <= 0 && S.cd <= 0 && S.drinkT <= 0 && S.charge < 0 && !S.block && S.combo === 0) {
+  // fresh chain (GS tap-to-start handled above via atkHold release)
+  if (run.weapon !== 'gs' && press && S.swing <= 0 && S.comboWin <= 0 && S.dodgeT <= 0 && S.cd <= 0 && S.drinkT <= 0 && S.charge < 0 && !S.block && S.combo === 0) {
     beginComboHit(0);
   }
 
@@ -1908,53 +1943,125 @@ function animatePlayer(dt) {
     elR: -0.4, elL: -0.4, handR: [0, 0, 0], handL: [0, 0, 0],
     torso: [0.15 * stride, 0, 0], bob: Math.abs(Math.cos(walkPh)) * 0.08 * stride, rigX: 0,
   };
-  if (wpn === 'gs') { pose.shR = [-0.5, 0.2, -0.5]; pose.shL = [-0.6, -0.3, 0.6]; pose.elR = -1.2; pose.elL = -1.3; pose.handR = [0.4, 0, 0]; }
-  if (S.block) { pose.shL = [-1.5, 0, 0.3]; pose.elL = -1.4; pose.handL = [0, -1.3, 0]; pose.torso = [0.1, 0.25, 0]; pose.hipL = -0.4; pose.knL = 0.5; pose.hipR = 0.3; pose.knR = 0.3; }
-  if (S.charge >= 0) { // great sword charge: blade overhead, wobbling as it fills
-    const q = Math.min(1, S.charge / 1.6), shake = q > 0.95 ? Math.sin(performance.now() / 25) * 0.05 : 0;
-    pose.shR = [-2.9 - q * 0.2 + shake, 0, -0.35]; pose.shL = [-2.9 - q * 0.2 + shake, 0, 0.35]; pose.elR = pose.elL = -0.3; pose.handR = [1.2, 0, 0];
-    pose.torso = [-0.25 * q, 0, 0]; pose.hipL = -0.5; pose.knL = 0.6; pose.hipR = 0.4; pose.knR = 0.2;
+  if (wpn === 'gs') { pose.shR = [-0.55, 0.35, -0.65]; pose.shL = [-0.7, -0.35, 0.75]; pose.elR = -1.35; pose.elL = -1.4; pose.handR = [0.55, 0, 0.1]; pose.torso = [0.08, 0, 0.05]; }
+  else if (wpn === 'ss') { pose.shR = [-0.35, 0.1, 0.25]; pose.shL = [-0.85, 0, 0.55]; pose.elR = -0.55; pose.elL = -1.15; pose.handL = [0, -0.4, 0]; }
+  else if (wpn === 'db') { pose.shR = [-0.45, 0.2, 0.55]; pose.shL = [-0.45, -0.2, -0.55]; pose.elR = pose.elL = -0.35; pose.handR = [0.2, 0, 0]; pose.handL = [0.2, 0, 0]; pose.torso = [0.05, 0, 0.08]; }
+  // Guard: GS braces the greatsword; SnS raises the shield
+  if (S.block) {
+    if (wpn === 'gs') {
+      pose.shR = [-1.35, 0.2, 0.85]; pose.shL = [-1.45, -0.15, 0.95]; pose.elR = -0.55; pose.elL = -0.65;
+      pose.handR = [0.9, 0.2, 0]; pose.handL = [0.2, -0.4, 0]; pose.torso = [0.15, 0.35, 0];
+      pose.hipL = -0.55; pose.knL = 0.7; pose.hipR = 0.4; pose.knR = 0.35; pose.bob = -0.08;
+    } else {
+      pose.shL = [-1.75, 0.1, 0.55]; pose.elL = -1.55; pose.handL = [0, -1.45, 0.2];
+      pose.shR = [-0.9, 0, -0.35]; pose.elR = -0.7; pose.torso = [0.12, 0.4, 0];
+      pose.hipL = -0.5; pose.knL = 0.6; pose.hipR = 0.35; pose.knR = 0.35;
+    }
+  }
+  if (S.charge >= 0) { // great sword charge: towering wind-up, shakes near full
+    const q = Math.min(1, S.charge / 1.6), shake = q > 0.85 ? Math.sin(performance.now() / 22) * (0.04 + q * 0.06) : 0;
+    pose.shR = [-3.15 - q * 0.35 + shake, 0.15, -0.55]; pose.shL = [-3.15 - q * 0.35 + shake, -0.1, 0.55];
+    pose.elR = pose.elL = -0.15; pose.handR = [1.45, 0.1, 0];
+    pose.torso = [-0.45 * q, 0, 0]; pose.hipL = -0.7; pose.knL = 0.85; pose.hipR = 0.55; pose.knR = 0.25; pose.bob = 0.12 * q;
   }
   if (S.swing > 0) {
     const p = 1 - S.swing / Math.max(0.001, S.swingDur);
-    const e = p < 0.35 ? p / 0.35 : 1;
+    const e = p < 0.28 ? p / 0.28 : 1; // snappy strike phase, long follow-through after
+    const follow = THREE.MathUtils.smoothstep(p, 0.45, 1); // settle after impact
     const id = S.comboId || '';
     if (wpn === 'gs' || id === 'charge') {
       if (id === 'side') {
-        pose.shR = [-1.2, 0, lerp(1.8, -1.4, e)]; pose.shL = [-0.8, 0, 0.4]; pose.elR = -0.3; pose.elL = -0.8;
-        pose.torso = [0.15, lerp(0.7, -0.7, e), 0]; pose.hipL = -0.4; pose.knL = 0.5; pose.hipR = 0.35;
+        // huge horizontal sweep with full torso twist + wide stance
+        const swing = THREE.MathUtils.smoothstep(p, 0.18, 0.48);
+        pose.shR = [lerp(-1.6, 0.4, swing), 0.2, lerp(2.4, -2.1, swing)];
+        pose.shL = [-1.1, -0.2, lerp(1.2, -0.3, swing)]; pose.elR = lerp(-0.15, -0.5, swing); pose.elL = -0.9;
+        pose.handR = [lerp(1.1, 0.4, swing), 0, 0];
+        pose.torso = [0.25, lerp(1.15, -1.2, swing), lerp(0.15, -0.2, swing)];
+        pose.hipL = -0.65; pose.knL = 0.8; pose.hipR = 0.55; pose.knR = 0.35;
+        pose.bob = lerp(0.05, -0.12, follow);
       } else if (id === 'slam') {
-        const wind = Math.min(1, p / 0.22), down = THREE.MathUtils.smoothstep(p, 0.2, 0.5);
-        const a = lerp(lerp(-0.4, -3.1, wind), 0.55, down);
-        pose.shR = [a, 0, -0.5]; pose.shL = [a, 0, 0.5]; pose.elR = pose.elL = -0.2; pose.handR = [lerp(1.3, 0.3, down), 0, 0];
-        pose.torso = [lerp(-0.4, 0.85, down), 0, 0]; pose.hipL = -0.9 * down; pose.knL = 1.2 * down; pose.hipR = 0.6 * down; pose.bob = -0.35 * down;
-      } else { // overhead / charge release
-        const wind = Math.min(1, p / 0.25), down = THREE.MathUtils.smoothstep(p, 0.2, 0.45);
-        const a = lerp(lerp(-0.5, -3.0, wind), 0.2, down);
-        pose.shR = [a, 0, -0.35]; pose.shL = [a, 0, 0.35]; pose.elR = pose.elL = -0.25; pose.handR = [lerp(1.2, 0.5, down), 0, 0];
-        pose.torso = [lerp(-0.3, 0.6, down), 0, 0]; pose.hipL = -0.7 * down; pose.knL = 1.0 * down; pose.hipR = 0.5 * down; pose.knR = 0.4 * down; pose.bob = -0.25 * down;
+        // longest wind-up, crash down, heavy recovery lean
+        const wind = Math.min(1, p / 0.32), down = THREE.MathUtils.smoothstep(p, 0.28, 0.52);
+        const a = lerp(lerp(-0.55, -3.45, wind), 0.85, down);
+        pose.shR = [a, 0.1, -0.7]; pose.shL = [a, -0.1, 0.7]; pose.elR = pose.elL = lerp(-0.1, -0.35, down);
+        pose.handR = [lerp(1.55, 0.2, down), 0, 0];
+        pose.torso = [lerp(-0.65, 1.15, down), 0, 0];
+        pose.hipL = -1.15 * down; pose.knL = 1.45 * down; pose.hipR = 0.85 * down; pose.knR = 0.55 * down;
+        pose.bob = lerp(0.2 * wind, -0.55 * down, Math.max(wind, down));
+      } else { // overhead / charge release — big sky-high wind-up then body-weight chop
+        const wind = Math.min(1, p / 0.3), down = THREE.MathUtils.smoothstep(p, 0.26, 0.5);
+        const a = lerp(lerp(-0.6, -3.35, wind), 0.45, down);
+        pose.shR = [a, 0.1, -0.5]; pose.shL = [a, -0.1, 0.5]; pose.elR = pose.elL = -0.12;
+        pose.handR = [lerp(1.4, 0.35, down), 0, 0];
+        pose.torso = [lerp(-0.55, 0.95, down), 0, 0];
+        pose.hipL = -0.95 * down; pose.knL = 1.25 * down; pose.hipR = 0.7 * down; pose.knR = 0.55 * down;
+        pose.bob = lerp(0.15 * wind, -0.4 * down, Math.max(wind, down));
       }
     } else if (wpn === 'ss') {
-      if (id === 'back') { pose.shR = [-1.4, 0, lerp(-0.5, 1.5, e)]; pose.torso = [0.1, lerp(-0.5, 0.55, e), 0]; }
-      else if (id === 'bash') { pose.shL = [-1.6, 0, lerp(0.2, 1.2, e)]; pose.elL = -0.4; pose.handL = [0, -0.8, 0]; pose.shR = [-0.8, 0, -0.3]; pose.torso = [0.2, 0.3, 0]; pose.hipL = -0.6; pose.knL = 0.7; }
-      else if (id === 'rising') { pose.shR = [lerp(-2.6, -0.2, e), 0, lerp(-0.2, 1.2, e)]; pose.shL = [-1.0, 0, 0.4]; pose.torso = [lerp(-0.2, 0.45, e), e * Math.PI * 1.2, 0]; pose.bob = Math.sin(e * Math.PI) * 0.25; }
-      else { pose.shR = [-1.4, 0, lerp(1.6, -0.3, e)]; pose.torso = [0.1, lerp(0.5, -0.5, e), 0]; }
-      pose.elR = pose.elR ?? -0.2; if (id !== 'bash') { pose.elR = -0.2; pose.hipL = -0.5; pose.knL = 0.5; pose.hipR = 0.3; if (!S.block) { pose.shL = pose.shL || [-0.9, 0, 0.3]; pose.elL = -1.0; } }
-    } else {
-      if (id === 'cross') {
-        pose.shR = [-1.3, 0, lerp(1.5, -1.2, e)]; pose.shL = [-1.3, 0, lerp(-1.5, 1.2, e)];
-        pose.elR = pose.elL = -0.15; pose.torso = [0.15, 0, 0];
-      } else if (id === 'flurry') {
-        pose.shR = [-1.3, 0, 1.3 - Math.sin(p * Math.PI * 3) * 0.5]; pose.shL = [-1.3, 0, -1.3 + Math.sin(p * Math.PI * 3) * 0.5];
-        pose.elR = pose.elL = -0.1; pose.torso = [0.25, p * Math.PI * 3, 0.2]; pose.hipL = -0.35; pose.knL = 0.45; pose.hipR = 0.35; pose.knR = 0.45;
-      } else if (id === 'finisher') {
-        pose.shR = [-1.5, 0, lerp(1.6, -1.6, e)]; pose.shL = [-1.5, 0, lerp(-1.6, 1.6, e)];
-        pose.elR = pose.elL = -0.05; pose.torso = [0.3, e * Math.PI * 2.2, 0.25]; pose.bob = Math.sin(e * Math.PI) * 0.2;
-      } else { // double slash
-        pose.shR = [-1.1, 0, lerp(1.2, -0.4, e)]; pose.shL = [-1.1, 0, lerp(-0.3, 1.1, e)];
-        pose.elR = pose.elL = -0.2; pose.torso = [0.15, lerp(0.3, -0.3, e), 0];
+      if (id === 'back') {
+        // theatrical reverse slash — lean back then whip across
+        pose.shR = [lerp(-2.1, -0.4, e), 0.2, lerp(-1.3, 2.0, e)]; pose.elR = lerp(-0.1, -0.55, e);
+        pose.handR = [lerp(0.9, 0.2, e), 0, 0]; pose.shL = [-1.1, 0, 0.55]; pose.elL = -1.15;
+        pose.torso = [lerp(-0.25, 0.35, e), lerp(-0.95, 0.9, e), 0];
+        pose.hipL = lerp(0.35, -0.55, e); pose.knL = lerp(0.2, 0.7, e); pose.hipR = lerp(-0.3, 0.4, e);
+        pose.bob = Math.sin(e * Math.PI) * 0.12;
+      } else if (id === 'bash') {
+        // shield slam: coil then punch forward with whole body
+        const punch = THREE.MathUtils.smoothstep(p, 0.15, 0.45);
+        pose.shL = [lerp(-2.0, -0.55, punch), 0.2, lerp(-0.2, 1.55, punch)]; pose.elL = lerp(-0.2, -0.7, punch);
+        pose.handL = [0, lerp(-0.4, -1.2, punch), 0]; pose.shR = [-1.0, 0, -0.45]; pose.elR = -0.6;
+        pose.torso = [lerp(-0.15, 0.55, punch), lerp(-0.2, 0.55, punch), 0];
+        pose.hipL = -0.85 * punch; pose.knL = 1.0 * punch; pose.hipR = 0.5 * punch; pose.bob = -0.18 * punch;
+      } else if (id === 'rising') {
+        // spinning rising slash — big leap + twirl
+        pose.shR = [lerp(-2.9, 0.15, e), 0.15, lerp(-0.4, 1.65, e)]; pose.elR = lerp(-0.05, -0.45, e);
+        pose.shL = [lerp(-1.4, -0.7, e), 0, lerp(0.2, 0.9, e)]; pose.elL = -1.0;
+        pose.torso = [lerp(-0.35, 0.65, e), e * Math.PI * 1.65, lerp(0.1, -0.15, e)];
+        pose.hipL = -0.4; pose.knL = 0.55; pose.hipR = 0.35; pose.knR = 0.45;
+        pose.bob = Math.sin(e * Math.PI) * 0.42;
+      } else { // opening diagonal slash — high flourish into cut
+        pose.shR = [lerp(-2.35, -0.25, e), 0.25, lerp(2.05, -1.1, e)]; pose.elR = lerp(-0.05, -0.5, e);
+        pose.handR = [lerp(1.0, 0.25, e), 0, 0]; pose.shL = [-1.05, 0, 0.6]; pose.elL = -1.2;
+        pose.torso = [0.18, lerp(0.85, -0.75, e), 0.08];
+        pose.hipL = -0.55; pose.knL = 0.65; pose.hipR = 0.4; pose.knR = 0.3;
+        pose.bob = Math.sin(e * Math.PI) * 0.1;
       }
-      pose.handR = [0.25, 0, 0]; pose.handL = [0.25, 0, 0];
+    } else {
+      // Dual Blades — distinct fast flurry language (both arms always live)
+      if (id === 'demon') {
+        pose.shR = [-1.6, 0.3, 1.8 - Math.sin(p * Math.PI * 4) * 0.9];
+        pose.shL = [-1.6, -0.3, -1.8 + Math.sin(p * Math.PI * 4) * 0.9];
+        pose.elR = pose.elL = -0.05; pose.torso = [0.35, p * Math.PI * 2.4, 0.3];
+        pose.hipL = -0.5; pose.knL = 0.65; pose.hipR = 0.5; pose.knR = 0.65; pose.bob = Math.sin(p * Math.PI * 2) * 0.15;
+      } else if (id === 'cross') {
+        // scissor cross — arms whip past each other with lean
+        pose.shR = [lerp(-1.85, -0.2, e), 0.35, lerp(2.1, -1.85, e)];
+        pose.shL = [lerp(-1.85, -0.2, e), -0.35, lerp(-2.1, 1.85, e)];
+        pose.elR = pose.elL = -0.05; pose.torso = [0.3, lerp(0.4, -0.4, e), 0.25];
+        pose.hipL = lerp(0.45, -0.45, e); pose.knL = 0.55; pose.hipR = lerp(-0.45, 0.45, e); pose.knR = 0.55;
+        pose.bob = Math.sin(e * Math.PI) * 0.14;
+      } else if (id === 'flurry') {
+        // tornado flurry — rapid multi-hit arm circles + full spin
+        const wave = Math.sin(p * Math.PI * 5);
+        pose.shR = [-1.75, 0.4, 1.7 - wave * 1.15]; pose.shL = [-1.75, -0.4, -1.7 + wave * 1.15];
+        pose.elR = pose.elL = 0.05; pose.handR = [0.35, 0, 0]; pose.handL = [0.35, 0, 0];
+        pose.torso = [0.4, p * Math.PI * 4.2, 0.35];
+        pose.hipL = -0.55; pose.knL = 0.7; pose.hipR = 0.55; pose.knR = 0.7;
+        pose.bob = 0.08 + Math.abs(wave) * 0.12;
+      } else if (id === 'finisher') {
+        // leaping X-slash finisher with big airborne spin
+        pose.shR = [lerp(-2.2, 0.35, e), 0.45, lerp(2.2, -2.3, e)];
+        pose.shL = [lerp(-2.2, 0.35, e), -0.45, lerp(-2.2, 2.3, e)];
+        pose.elR = pose.elL = 0.1; pose.torso = [lerp(-0.2, 0.55, e), e * Math.PI * 2.8, 0.4];
+        pose.hipL = -0.7; pose.knL = 0.9; pose.hipR = 0.7; pose.knR = 0.9;
+        pose.bob = Math.sin(e * Math.PI) * 0.48;
+      } else { // double — staggered left/right stabs, low crouch rush
+        pose.shR = [lerp(-1.5, -0.15, e), 0.25, lerp(1.65, -0.85, e)];
+        pose.shL = [lerp(-0.6, -1.55, e), -0.25, lerp(-0.5, 1.55, e)];
+        pose.elR = pose.elL = -0.1; pose.torso = [0.28, lerp(0.55, -0.55, e), 0.2];
+        pose.hipL = -0.7; pose.knL = 0.85; pose.hipR = 0.55; pose.knR = 0.65; pose.bob = -0.1;
+      }
+      pose.handR = pose.handR || [0.3, 0, 0]; pose.handL = pose.handL || [0.3, 0, 0];
     }
   }
   if (S.drinkT > 0) { pose.shR = [-2.2, 0, -0.6]; pose.elR = -1.9; pose.torso = [-0.3, 0, 0]; }
@@ -1972,7 +2079,7 @@ function animatePlayer(dt) {
   R.el.rotation.x = lerp(R.el.rotation.x, pose.elR, k); L.el.rotation.x = lerp(L.el.rotation.x, pose.elL, k);
   sk(R.hand.rotation, pose.handR); sk(L.hand.rotation, pose.handL);
   // spin and roll are set directly so they don't lag behind the motion
-  const spinning = S.swing > 0 && (S.comboId === 'flurry' || S.comboId === 'finisher' || S.comboId === 'rising');
+  const spinning = S.swing > 0 && (S.comboId === 'flurry' || S.comboId === 'finisher' || S.comboId === 'rising' || S.comboId === 'demon');
   torso.rotation.x = lerp(torso.rotation.x, pose.torso[0], k); torso.rotation.z = lerp(torso.rotation.z, pose.torso[2], k);
   torso.rotation.y = spinning ? pose.torso[1] : lerp(torso.rotation.y, pose.torso[1], k);
   rig.rotation.x = pose.rigX;
@@ -1999,11 +2106,13 @@ function hud() {
   let pot = `藥水 ×${S.potions}`;
   if (S.charge >= 0) pot += ` · 蓄力`;
   else if (S.combo > 1) pot += ` · 連擊 ${S.combo}`;
+  if (S.atkBoostT > 0) pot += ` · 攻↑`;
   $('pot').textContent = pot;
-  // debuff icons
+  // debuff / buff icons
   const db = $('debuffs');
   if (db) {
     const bits = [];
+    if (S.atkBoostT > 0) bits.push(`<div class="db" style="color:#ffb040;border-color:#ffb040aa">攻↑ ${S.atkBoostT.toFixed(1)}s</div>`);
     if (S.debuffs.poison > 0) bits.push(`<div class="db" style="color:#8d8">毒 ${S.debuffs.poison.toFixed(1)}s</div>`);
     if (S.debuffs.slow > 0) bits.push(`<div class="db" style="color:#8cf">緩 ${S.debuffs.slow.toFixed(1)}s</div>`);
     if (S.debuffs.dark > 0) bits.push(`<div class="db" style="color:#ccc">暗 ${S.debuffs.dark.toFixed(1)}s</div>`);
@@ -2106,10 +2215,10 @@ frame();
 window.__hunt = {
   run, get S() { return S; }, player, get dragons() { return dragons; }, get living() { return livingDragons(); },
   startFight, showPreview, generateEncounter, generateDragon, playerPower, estimatePower,
-  pad, pollGamepad, COMBOS, sampleHeight, OBSTACLES, COLOR_DEFS, SFX, BGM, nearestDragon, beginComboHit, resetCombo,
-  get PIXEL_SCALE() { return PIXEL_SCALE; }, pStats,
+  pad, pollGamepad, WEAPONS, COMBOS, sampleHeight, OBSTACLES, COLOR_DEFS, SFX, BGM, nearestDragon, beginComboHit, resetCombo,
+  get PIXEL_SCALE() { return PIXEL_SCALE; }, pStats, DB_ATK_BUFF_T, DB_ATK_BUFF_MUL,
   goTitle, spawnTitleDragon, hurtPlayer, ensureAudio, spawnProjectile, pickAtk, dragonElems,
-  doHit, spawnHitBurst, spawnDmgNumber, applyDragonPain, beginComboHit, severTail,
+  doHit, spawnHitBurst, spawnDmgNumber, applyDragonPain, beginComboHit, severTail, animatePlayer, buildWeapon,
   get muted() { return muted; }, get bgmMuted() { return bgmMuted; }, get bgmMode() { return bgmMode; },
   get projectiles() { return projectiles; }, get effects() { return effects; }, get floaters() { return floaters; },
 };
