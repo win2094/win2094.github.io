@@ -8,31 +8,59 @@ const WEAPONS = {
   ss: { name: '單手劍', dmg: 15, cd: 0.2, range: 3.1, speedMul: 1.0, col: 0xc8ced4, canBlock: true },
   db: { name: '雙刀', dmg: 8, cd: 0.08, range: 2.9, speedMul: 1.18, col: 0xd0c090, canBlock: false },
 };
-// MH-style chains: press attack again in buffer window to continue
-// GS slow & weighty · SnS medium theatrical · DB fastest flurry
-const COMBOS = {
-  gs: [
-    { id: 'overhead', dmg: 1.05, range: 4.4, dur: 0.98, label: null },
-    { id: 'side', dmg: 1.2, range: 4.9, dur: 0.88, label: '橫斬' },
-    { id: 'slam', dmg: 1.75, range: 5.4, dur: 1.15, label: '廣域砸！' },
-  ],
-  ss: [
-    { id: 'slash', dmg: 1.0, range: 3.1, dur: 0.38, label: null },
-    { id: 'back', dmg: 1.08, range: 3.25, dur: 0.4, label: '回斬' },
-    { id: 'bash', dmg: 1.25, range: 2.95, dur: 0.44, label: '盾擊' },
-    { id: 'rising', dmg: 1.55, range: 3.55, dur: 0.58, label: '迴旋斬！' },
-  ],
-  db: [
-    { id: 'double', dmg: 0.95, range: 2.9, dur: 0.18, label: null },
-    { id: 'cross', dmg: 1.1, range: 3.1, dur: 0.2, label: null },
-    { id: 'flurry', dmg: 1.35, range: 3.35, dur: 0.32, label: '亂舞' },
-    { id: 'finisher', dmg: 1.7, range: 3.65, dur: 0.4, label: '終結！' },
-  ],
+// Branching combos: 斬=A · 技=S
+// Routes: AAA · AAS(斬斬技) · ASAA(斬技斬斬) · ASSA(斬技技斬)
+const COMBO_TREE = {
+  gs: {
+    A:    { id: 'overhead', dmg: 1.05, range: 4.4, dur: 0.95, label: null },
+    AA:   { id: 'side', dmg: 1.2, range: 4.9, dur: 0.85, label: '橫斬' },
+    AAA:  { id: 'slam', dmg: 1.75, range: 5.4, dur: 1.12, label: '廣域砸！' },
+    AAS:  { id: 'crush', dmg: 2.05, range: 5.7, dur: 1.18, label: '崩山斬！' }, // 斬斬技
+    AS:   { id: 'guardCut', dmg: 1.25, range: 4.5, dur: 0.72, label: '格斬' },
+    ASA:  { id: 'wide', dmg: 1.4, range: 5.1, dur: 0.82, label: '迴斬' },
+    ASAA: { id: 'trueCharge', dmg: 2.25, range: 5.9, dur: 1.08, label: '真蓄力！' }, // 斬技斬斬
+    ASS:  { id: 'spinPrep', dmg: 1.35, range: 4.8, dur: 0.7, label: '迴勢' },
+    ASSA: { id: 'whirl', dmg: 2.15, range: 5.6, dur: 1.05, label: '大迴旋！' }, // 斬技技斬
+  },
+  ss: {
+    A:    { id: 'slash', dmg: 1.0, range: 3.1, dur: 0.36, label: null },
+    AA:   { id: 'back', dmg: 1.08, range: 3.25, dur: 0.38, label: '回斬' },
+    AAA:  { id: 'bash', dmg: 1.25, range: 2.95, dur: 0.42, label: '盾擊' },
+    AAAA: { id: 'rising', dmg: 1.55, range: 3.55, dur: 0.55, label: '迴旋斬！' },
+    AAS:  { id: 'shieldBurst', dmg: 1.7, range: 3.4, dur: 0.5, label: '盾爆！' }, // 斬斬技
+    AS:   { id: 'advSlash', dmg: 1.15, range: 3.2, dur: 0.34, label: '踏斬' },
+    ASA:  { id: 'twist', dmg: 1.2, range: 3.3, dur: 0.36, label: '絞斬' },
+    ASAA: { id: 'flourish', dmg: 1.85, range: 3.7, dur: 0.56, label: '華麗斬！' }, // 斬技斬斬
+    ASS:  { id: 'bashSpin', dmg: 1.3, range: 3.1, dur: 0.4, label: '盾旋' },
+    ASSA: { id: 'vault', dmg: 1.9, range: 3.8, dur: 0.58, label: '躍斬！' }, // 斬技技斬
+  },
+  db: {
+    A:    { id: 'double', dmg: 0.95, range: 2.9, dur: 0.17, label: null },
+    AA:   { id: 'cross', dmg: 1.1, range: 3.1, dur: 0.19, label: null },
+    AAA:  { id: 'flurry', dmg: 1.35, range: 3.35, dur: 0.3, label: '亂舞' },
+    AAAA: { id: 'finisher', dmg: 1.7, range: 3.65, dur: 0.38, label: '終結！' },
+    AAS:  { id: 'bladeStorm', dmg: 1.85, range: 3.8, dur: 0.42, label: '刃嵐！' }, // 斬斬技
+    AS:   { id: 'hex', dmg: 1.15, range: 3.15, dur: 0.2, label: '交叉' },
+    ASA:  { id: 'rush', dmg: 1.25, range: 3.3, dur: 0.22, label: '突進' },
+    ASAA: { id: 'razor', dmg: 1.95, range: 3.9, dur: 0.4, label: '剃刀！' }, // 斬技斬斬
+    ASS:  { id: 'spiral', dmg: 1.4, range: 3.4, dur: 0.28, label: '螺旋' },
+    ASSA: { id: 'tempest', dmg: 2.05, range: 4.0, dur: 0.44, label: '嵐斬！' }, // 斬技技斬
+  },
 };
-const COMBO_BUFFER = 0.34; // after swing ends, still chainable
+// legacy linear view for debug / HUD
+const COMBOS = Object.fromEntries(Object.entries(COMBO_TREE).map(([w, tree]) => {
+  const linear = [];
+  let r = 'A';
+  while (tree[r]) { linear.push(tree[r]); r += 'A'; }
+  return [w, linear];
+}));
+const COMBO_BUFFER = 0.36; // after swing ends, still chainable
 const COMBO_LINK = 0.55;   // fraction of swing remaining when buffer opens
 const DB_ATK_BUFF_T = 5;   // dual blades: +ATK window after landing a hit
 const DB_ATK_BUFF_MUL = 1.4;
+function comboHasBranch(route, ch) {
+  return !!(COMBO_TREE[run.weapon] && COMBO_TREE[run.weapon][route + ch]);
+}
 
 // ---------- persistent run state ----------
 const run = { weapon: 'gs', fight: 0, pts: 0, stats: { hp: 0, atk: 0, def: 0, sta: 0, spd: 0 } };
@@ -892,7 +920,7 @@ function startFight(defs) {
   const primary = dragons[0];
   S = {
     ps, hp: ps.maxHp, st: ps.maxSt, potions: 3, cd: 0, swing: 0, swingDur: 0, charge: -1, block: false, dodgeT: 0, invuln: 0, drinkT: 0, hurtT: 0,
-    combo: 0, comboStep: 0, atkBuf: false, comboWin: 0, comboId: '', atkHold: 0, atkBoostT: 0,
+    combo: 0, comboStep: 0, atkBuf: false, comboWin: 0, comboId: '', comboRoute: '', pendingInput: null, atkHold: 0, atkBoostT: 0,
     debuffs: { poison: 0, slow: 0, dark: 0 }, camShake: 0, hitFlash: 0, hurtFx: 0, over: false, introT: 2.0, winPending: false,
   };
   $('dname').textContent = list.length > 1 ? `第${run.fight + 1}戰：${list.length} 龍` : `第${run.fight + 1}戰：${primary.def.name}`;
@@ -1425,26 +1453,69 @@ function optsScale(f) {
 
 function spawnProjectile(origin, dir, kind, dmg) {
   const col = ELEM_COL[kind] || 0xffffff;
+  // big, readable orbs — player must dodge on timing, not pixel-hunt
   let mesh;
   if (kind === 'lightning') {
-    mesh = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.35, 1.2), new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.9 }));
+    mesh = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.7, 1.8), new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.92 }));
   } else if (kind === 'blast') {
-    mesh = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.9, 0.9), new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.8 }));
+    mesh = new THREE.Mesh(new THREE.BoxGeometry(1.6, 1.6, 1.6), new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.85 }));
   } else if (kind === 'poison') {
-    mesh = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.55, 0.55), new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.85 }));
+    mesh = new THREE.Mesh(new THREE.BoxGeometry(1.15, 1.15, 1.15), new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.88 }));
   } else {
-    mesh = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.5, 0.85), new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.9 }));
+    mesh = new THREE.Mesh(new THREE.BoxGeometry(1.2, 1.2, 1.5), new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.92 }));
   }
   mesh.position.copy(origin); scene.add(mesh);
-  const spd = kind === 'blast' ? 15 : kind === 'lightning' ? 24 : 18;
-  const v = dir.clone().normalize().multiplyScalar(spd);
-  projectiles.push({ mesh, v, t: 1.8, kind, dmg, hit: false });
+  const spd = kind === 'blast' ? 28 : kind === 'lightning' ? 38 : kind === 'poison' ? 30 : 34;
+  const v = dir.clone();
+  if (v.lengthSq() < 1e-6) v.set(0, -0.1, 1);
+  v.normalize().multiplyScalar(spd);
+  const hitR = kind === 'blast' ? 3.2 : kind === 'lightning' ? 2.6 : 2.9;
+  projectiles.push({ mesh, v, t: 2.0, kind, dmg, hit: false, hitR });
   // muzzle flash spark
   spawnSpark(origin.clone(), col);
   if (kind === 'fire') SFX.fire();
   else if (kind === 'poison') SFX.poison();
   else if (kind === 'lightning') SFX.lightning();
   else if (kind === 'blast') SFX.blast();
+}
+
+/** Layered dust sheets + grit under a charging quadruped */
+function spawnChargeDust(d) {
+  const origin = d.root.position.clone();
+  const gy = sampleHeight(origin.x, origin.z);
+  const bx = -(d.ai.dir.x || 0), bz = -(d.ai.dir.z || 1);
+  const dustCol = [0xc4a878, 0xb89868, 0xd0b890];
+  for (let layer = 0; layer < 3; layer++) {
+    if (effects.length > 54) break;
+    const sheet = new THREE.Mesh(
+      new THREE.BoxGeometry(2.4 + layer * 1.1, 0.1 + layer * 0.1, 1.6 + layer * 0.7),
+      new THREE.MeshBasicMaterial({ color: dustCol[layer], transparent: true, opacity: 0.62 - layer * 0.14 })
+    );
+    sheet.position.set(
+      origin.x + bx * (0.8 + layer * 0.9),
+      gy + 0.12 + layer * 0.28,
+      origin.z + bz * (0.8 + layer * 0.9)
+    );
+    sheet.rotation.y = Math.atan2(d.ai.dir.x, d.ai.dir.z);
+    scene.add(sheet);
+    effects.push({
+      obj: sheet, t: 0.38 + layer * 0.1, kind: 'dust', grow: true,
+      v: new THREE.Vector3(bx * (2 + layer), 0.6 + layer * 0.5, bz * (2 + layer)),
+    });
+  }
+  for (let i = 0; i < 6; i++) {
+    if (effects.length > 56) break;
+    const grit = new THREE.Mesh(
+      new THREE.BoxGeometry(0.3 + Math.random() * 0.35, 0.2, 0.3 + Math.random() * 0.35),
+      new THREE.MeshBasicMaterial({ color: dustCol[i % 3], transparent: true, opacity: 0.8 })
+    );
+    grit.position.set(origin.x + (Math.random() - 0.5) * 2, gy + 0.2, origin.z + (Math.random() - 0.5) * 2);
+    scene.add(grit);
+    effects.push({
+      obj: grit, t: 0.35 + Math.random() * 0.2, kind: 'spark',
+      v: new THREE.Vector3(bx * (4 + Math.random() * 5) + (Math.random() - 0.5) * 3, 2 + Math.random() * 3, bz * (4 + Math.random() * 5) + (Math.random() - 0.5) * 3),
+    });
+  }
 }
 
 // ---------- dragon AI ----------
@@ -1676,10 +1747,19 @@ function updateOneDragon(d, dt, t) {
       if (ai.atk === 'breath') { d.neck.rotation.x = -0.45; d.jaw.rotation.x = 0.55; }
       if (ai.atk === 'dive') { d.neck.rotation.x = 0.5; }
       if (ai.t <= 0) {
-        // commit: final face for breath, then lock ai.dir for the whole act
-        if (ai.atk === 'breath') root.rotation.y = wantYaw;
+        // commit: final face; breath locks 3D aim at player (not sky / flat horizontal)
+        if (ai.atk === 'breath') {
+          root.rotation.y = wantYaw;
+          const mouth = worldPos(d.head);
+          mouth.y += 0.35 * d.scale;
+          const target = tmp2.set(player.position.x, player.position.y + 1.15, player.position.z);
+          ai.dir.copy(target).sub(mouth);
+          if (ai.dir.lengthSq() < 0.01) ai.dir.set(Math.sin(root.rotation.y), -0.15, Math.cos(root.rotation.y));
+          ai.dir.normalize();
+        } else {
+          ai.dir.set(Math.sin(root.rotation.y), 0, Math.cos(root.rotation.y));
+        }
         ai.state = 'act'; ai.t = A.act;
-        ai.dir.set(Math.sin(root.rotation.y), 0, Math.cos(root.rotation.y));
         ai.breathShots = 0;
         if (ai.atk === 'charge') SFX.stomp();
       }
@@ -1706,32 +1786,33 @@ function updateOneDragon(d, dt, t) {
         if (flatDist(tip, player.position) < 2.8 * d.scale) { ai.hit = true; hurtPlayer(22, root.position); }
       }
     } else if (ai.atk === 'charge') {
-      const spd = 17 * def.speed * hornBonus;
+      // quadrupeds charge much faster with layered dust kickup
+      const quad = def.legs === 'quad';
+      const spd = (quad ? 30 : 18) * def.speed * hornBonus;
       const before = { x: root.position.x, z: root.position.z };
-      // charge with steering so rocks don't hard-stop forever
-      steerMove(d, root.position.x + ai.dir.x * 10, root.position.z + ai.dir.z * 10, spd, dt);
-      walk = 2;
-      if (Math.random() < dt * 4) SFX.stomp();
+      steerMove(d, root.position.x + ai.dir.x * 12, root.position.z + ai.dir.z * 12, spd, dt);
+      walk = quad ? 3.2 : 2;
+      if (quad && Math.random() < dt * 14) spawnChargeDust(d);
+      else if (!quad && Math.random() < dt * 5) spawnChargeDust(d);
+      if (Math.random() < dt * (quad ? 7 : 4)) SFX.stomp();
       if (!ai.hit && dist < 3.5 * d.scale) { ai.hit = true; hurtPlayer(28 * hornBonus, root.position); }
       const moved = Math.hypot(root.position.x - before.x, root.position.z - before.z);
-      if (moved < spd * dt * 0.2) {
+      if (moved < spd * dt * 0.18) {
         ai.state = 'rec'; ai.t = 1.1; showMsg('撞石！', 0.5); SFX.stomp(); d.steerSide *= -1;
       }
     } else if (ai.atk === 'breath') {
-      // locked aim — do NOT track the player mid-breath; volley follows committed ai.dir
-      d.neck.rotation.x = -0.2; d.jaw.rotation.x = 0.65;
+      // locked 3D aim from commit — do NOT track player mid-breath
+      d.neck.rotation.x = -0.15; d.jaw.rotation.x = 0.7;
       const elapsed = A.act - ai.t;
       const elems = dragonElems(def);
-      // 3 reliable shots at 0.15s, 0.45s, 0.75s along the locked direction
-      const schedule = [0.15, 0.45, 0.75];
+      const schedule = [0.12, 0.38, 0.64];
       while (ai.breathShots < schedule.length && elapsed >= schedule[ai.breathShots]) {
         const kind = elems[ai.breathShots % elems.length] || elems[0] || 'fire';
         const mouth = worldPos(d.head);
-        mouth.y += 0.4 * d.scale;
+        mouth.y += 0.35 * d.scale;
         const aim = tmp2.copy(ai.dir);
-        aim.y = -0.04; // slight drop; horizontal direction is frozen at commit
-        if (aim.lengthSq() < 0.01) aim.set(Math.sin(root.rotation.y), -0.04, Math.cos(root.rotation.y));
-        spawnProjectile(mouth, aim, kind, 14);
+        if (aim.lengthSq() < 0.01) aim.set(Math.sin(root.rotation.y), -0.2, Math.cos(root.rotation.y));
+        spawnProjectile(mouth, aim, kind, 16);
         showMsg(kind === 'fire' ? '火球！' : kind === 'poison' ? '毒液！' : kind === 'lightning' ? '雷球！' : '暗爆！', 0.45);
         ai.breathShots++;
       }
@@ -1835,10 +1916,10 @@ function updateProjectiles(dt) {
     const p = projectiles[i];
     p.t -= dt;
     p.mesh.position.addScaledVector(p.v, dt);
-    p.v.y -= (p.kind === 'lightning' ? 2 : 5) * dt;
+    p.v.y -= (p.kind === 'lightning' ? 1.2 : 3.2) * dt; // lighter drop so locked aim stays readable
     if (p.v.lengthSq() > 0.01) p.mesh.lookAt(p.mesh.position.x + p.v.x, p.mesh.position.y + p.v.y, p.mesh.position.z + p.v.z);
     if (Math.random() < dt * 8) spawnSpark(p.mesh.position.clone(), ELEM_COL[p.kind] || 0xffffff);
-    const hitR = p.kind === 'blast' ? 2.2 : 1.9;
+    const hitR = p.hitR || (p.kind === 'blast' ? 3.2 : 2.9);
     const py = player.position.y + 1.1;
     const dist3 = Math.hypot(p.mesh.position.x - player.position.x, p.mesh.position.y - py, p.mesh.position.z - player.position.z);
     if (!p.hit && dist3 < hitR) {
@@ -1873,25 +1954,36 @@ function updateDebuffs(dt) {
 
 
 // ---------- player update ----------
-let attackHeldPrev = false, prevSwing = 0;
+let attackHeldPrev = false, specialHeldPrev = false, prevSwing = 0;
 function attackPressed() {
   const held = !!(input.attack || pad.attack);
   const press = held && !attackHeldPrev;
   attackHeldPrev = held;
   return press;
 }
+function specialPressed() {
+  const held = !!(input.special || pad.special);
+  const press = held && !specialHeldPrev;
+  specialHeldPrev = held;
+  return press;
+}
 function resetCombo() {
   if (!S) return;
-  S.combo = 0; S.comboStep = 0; S.comboId = ''; S.atkBuf = false; S.comboWin = 0;
+  S.combo = 0; S.comboStep = 0; S.comboId = ''; S.comboRoute = '';
+  S.atkBuf = false; S.pendingInput = null; S.comboWin = 0;
 }
-function beginComboHit(step) {
-  const chain = COMBOS[run.weapon];
-  const hit = chain[step];
-  if (!hit || !S) return;
-  S.comboStep = step; S.combo = step + 1; S.comboId = hit.id;
+function beginComboRoute(ch) {
+  if (!S) return false;
+  const route = (S.comboRoute || '') + ch;
+  const hit = COMBO_TREE[run.weapon]?.[route];
+  if (!hit) return false;
+  S.comboRoute = route;
+  S.comboStep = route.length - 1;
+  S.combo = route.length;
+  S.comboId = hit.id;
   S.cd = Math.max(0.05, WEAPONS[run.weapon].cd * 0.35);
   S.swing = S.swingDur = hit.dur;
-  S.atkBuf = false; S.comboWin = 0;
+  S.atkBuf = false; S.pendingInput = null; S.comboWin = 0;
   const nd = nearestDragon();
   if (nd) {
     const v = tmp.copy(nd.root.position).sub(player.position);
@@ -1899,17 +1991,25 @@ function beginComboHit(step) {
   }
   doHit(hit.dmg, hit.label, hit.range / WEAPONS[run.weapon].range);
   SFX.slash();
+  return true;
+}
+/** @deprecated linear step API — maps to pure-A route */
+function beginComboHit(step) {
+  if (!S) return;
+  S.comboRoute = 'A'.repeat(Math.max(0, step));
+  beginComboRoute('A');
 }
 function updatePlayer(dt) {
   const w = WEAPONS[run.weapon];
-  const chain = COMBOS[run.weapon];
   S.cd -= dt; S.invuln -= dt; S.dodgeT -= dt; S.hurtT -= dt; S.swing -= dt;
   if (S.comboWin > 0) S.comboWin -= dt;
   const press = attackPressed();
+  const spPress = specialPressed();
   let mx = input.mx + pad.mx + ((keys.KeyD || keys.ArrowRight ? 1 : 0) - (keys.KeyA || keys.ArrowLeft ? 1 : 0));
   let mz = input.mz + pad.mz + ((keys.KeyS || keys.ArrowDown ? 1 : 0) - (keys.KeyW || keys.ArrowUp ? 1 : 0));
   const ml = Math.hypot(mx, mz); if (ml > 1) { mx /= ml; mz /= ml; }
   const specialHeld = input.special || pad.special;
+  const inCombo = S.combo > 0 || S.swing > 0 || S.comboWin > 0;
   const cy = Math.cos(camYaw), sy = Math.sin(camYaw);
   const dir = new THREE.Vector3(-mx * cy - mz * sy, 0, mx * sy - mz * cy);
   let speed = S.ps.spd * w.speedMul * (S.debuffs.slow > 0 ? 0.75 : 1);
@@ -1950,12 +2050,24 @@ function updatePlayer(dt) {
   if (S.atkBoostT > 0) S.atkBoostT = Math.max(0, S.atkBoostT - dt);
   const atkHeld = !!(input.attack || pad.attack);
   S.block = false;
-  if (run.weapon === 'gs') {
-    // GS: special = guard; hold attack from idle = charge; tap attack = combo
-    if (specialHeld && S.st > 0 && S.swing <= 0 && S.charge < 0) {
-      S.block = true; S.st -= 8 * dt; S.atkHold = 0;
-      if (S.combo > 0) resetCombo();
-    } else if (atkHeld && S.combo === 0 && S.swing <= 0 && S.cd <= 0 && S.dodgeT <= 0 && S.drinkT <= 0 && !S.block) {
+
+  // Idle special: GS/SnS guard · DB demon — NOT while mid-combo (技 is a combo branch there)
+  if (!inCombo && S.charge < 0) {
+    if (run.weapon === 'gs' || run.weapon === 'ss') {
+      if (specialHeld && S.st > 0 && S.swing <= 0 && S.dodgeT <= 0 && S.drinkT <= 0) {
+        S.block = true; S.st -= 8 * dt; S.atkHold = 0;
+      }
+    } else if (run.weapon === 'db') {
+      if (specialHeld && S.st > 5 && S.cd <= 0 && S.swing <= 0 && S.dodgeT <= 0 && S.drinkT <= 0) {
+        faceDragon(); S.st -= 6; S.cd = 0.08; S.swing = S.swingDur = 0.22; S.comboId = 'demon';
+        doHit(0.95, null); resetCombo();
+      }
+    }
+  }
+
+  // GS: hold attack from idle = charge; tap = start combo
+  if (run.weapon === 'gs' && !S.block) {
+    if (atkHeld && S.combo === 0 && S.swing <= 0 && S.cd <= 0 && S.dodgeT <= 0 && S.drinkT <= 0 && S.comboWin <= 0) {
       S.atkHold += dt;
       if (S.atkHold >= 0.32) {
         if (S.charge < 0) { S.charge = 0; faceDragon(); resetCombo(); }
@@ -1968,39 +2080,38 @@ function updatePlayer(dt) {
     } else if (!atkHeld && S.atkHold > 0 && S.atkHold < 0.32) {
       S.atkHold = 0;
       if (S.cd <= 0 && S.dodgeT <= 0 && S.drinkT <= 0 && S.combo === 0 && S.swing <= 0)
-        beginComboHit(0);
+        beginComboRoute('A');
     } else if (!atkHeld) {
       S.atkHold = 0;
     }
-  } else if (run.weapon === 'ss') {
-    if (specialHeld && S.st > 0 && S.swing <= 0) { S.block = true; S.st -= 8 * dt; if (S.combo > 0) resetCombo(); }
-  } else if (run.weapon === 'db') {
-    // Dual Blades: NO block — special is demon dash flurry
-    if (specialHeld && S.st > 5 && S.cd <= 0 && S.swing <= 0) {
-      faceDragon(); S.st -= 6; S.cd = 0.08; S.swing = S.swingDur = 0.22; S.comboId = 'demon';
-      doHit(0.95, null); resetCombo();
-    }
   }
 
-  // --- combo input ---
-  if (S.swing > 0 && press && (S.swing / S.swingDur) <= COMBO_LINK) S.atkBuf = true;
-  // swing ended this frame
+  // --- branching combo input (斬=A / 技=S) ---
+  const canChain = S.dodgeT <= 0 && S.drinkT <= 0 && S.charge < 0 && !S.block;
+  if (S.swing > 0 && (S.swing / S.swingDur) <= COMBO_LINK && canChain) {
+    if (press) S.pendingInput = 'A';
+    if (spPress) S.pendingInput = 'S';
+  }
   if (prevSwing > 0 && S.swing <= 0) {
-    if (S.atkBuf && S.comboStep + 1 < chain.length) beginComboHit(S.comboStep + 1);
-    else if (S.comboStep + 1 < chain.length) S.comboWin = COMBO_BUFFER;
+    const route = S.comboRoute || '';
+    if (S.pendingInput && comboHasBranch(route, S.pendingInput)) beginComboRoute(S.pendingInput);
+    else if (comboHasBranch(route, 'A') || comboHasBranch(route, 'S')) S.comboWin = COMBO_BUFFER;
     else resetCombo();
+    S.pendingInput = null;
   }
   prevSwing = Math.max(0, S.swing);
-  // buffer window after swing
-  if (S.comboWin > 0 && press && S.dodgeT <= 0 && S.drinkT <= 0 && S.charge < 0 && !S.block) {
-    if (S.comboStep + 1 < chain.length) beginComboHit(S.comboStep + 1);
-    else resetCombo();
-  } else if (S.combo > 0 && S.swing <= 0 && S.comboWin <= 0 && !S.atkBuf) {
+  if (S.comboWin > 0 && canChain) {
+    if (press) {
+      if (!beginComboRoute('A')) resetCombo();
+    } else if (spPress) {
+      if (!beginComboRoute('S')) resetCombo();
+    }
+  } else if (S.combo > 0 && S.swing <= 0 && S.comboWin <= 0 && !S.pendingInput) {
     resetCombo();
   }
-  // fresh chain (GS tap-to-start handled above via atkHold release)
-  if (run.weapon !== 'gs' && press && S.swing <= 0 && S.comboWin <= 0 && S.dodgeT <= 0 && S.cd <= 0 && S.drinkT <= 0 && S.charge < 0 && !S.block && S.combo === 0) {
-    beginComboHit(0);
+  // fresh chain (non-GS)
+  if (run.weapon !== 'gs' && press && S.swing <= 0 && S.comboWin <= 0 && canChain && S.cd <= 0 && S.combo === 0) {
+    beginComboRoute('A');
   }
 
   if (!specialHeld && !S.block && S.dodgeT <= 0 && S.charge < 0) S.st = Math.min(S.ps.maxSt, S.st + 28 * dt);
@@ -2050,8 +2161,7 @@ function animatePlayer(dt) {
     const follow = THREE.MathUtils.smoothstep(p, 0.45, 1); // settle after impact
     const id = S.comboId || '';
     if (wpn === 'gs' || id === 'charge') {
-      if (id === 'side') {
-        // huge horizontal sweep with full torso twist + wide stance
+      if (id === 'side' || id === 'wide') {
         const swing = THREE.MathUtils.smoothstep(p, 0.18, 0.48);
         pose.shR = [lerp(-1.6, 0.4, swing), 0.2, lerp(2.4, -2.1, swing)];
         pose.shL = [-1.1, -0.2, lerp(1.2, -0.3, swing)]; pose.elR = lerp(-0.15, -0.5, swing); pose.elL = -0.9;
@@ -2059,16 +2169,23 @@ function animatePlayer(dt) {
         pose.torso = [0.25, lerp(1.15, -1.2, swing), lerp(0.15, -0.2, swing)];
         pose.hipL = -0.65; pose.knL = 0.8; pose.hipR = 0.55; pose.knR = 0.35;
         pose.bob = lerp(0.05, -0.12, follow);
-      } else if (id === 'slam') {
-        // longest wind-up, crash down, heavy recovery lean
+      } else if (id === 'slam' || id === 'crush' || id === 'trueCharge') {
         const wind = Math.min(1, p / 0.32), down = THREE.MathUtils.smoothstep(p, 0.28, 0.52);
-        const a = lerp(lerp(-0.55, -3.45, wind), 0.85, down);
+        const a = lerp(lerp(-0.55, id === 'trueCharge' ? -3.6 : -3.45, wind), 0.85, down);
         pose.shR = [a, 0.1, -0.7]; pose.shL = [a, -0.1, 0.7]; pose.elR = pose.elL = lerp(-0.1, -0.35, down);
         pose.handR = [lerp(1.55, 0.2, down), 0, 0];
         pose.torso = [lerp(-0.65, 1.15, down), 0, 0];
         pose.hipL = -1.15 * down; pose.knL = 1.45 * down; pose.hipR = 0.85 * down; pose.knR = 0.55 * down;
         pose.bob = lerp(0.2 * wind, -0.55 * down, Math.max(wind, down));
-      } else { // overhead / charge release — big sky-high wind-up then body-weight chop
+      } else if (id === 'guardCut' || id === 'spinPrep') {
+        pose.shR = [lerp(-2.4, 0.2, e), 0.3, lerp(1.6, -1.8, e)]; pose.shL = [-1.4, -0.2, 0.7];
+        pose.elR = -0.2; pose.elL = -0.9; pose.handR = [lerp(1.1, 0.3, e), 0, 0];
+        pose.torso = [0.2, lerp(0.6, -0.9, e), 0.1]; pose.hipL = -0.7; pose.knL = 0.85; pose.bob = -0.1 * e;
+      } else if (id === 'whirl') {
+        pose.shR = [lerp(-2.8, 0.5, e), 0.2, lerp(2.0, -2.2, e)]; pose.shL = [lerp(-2.2, -0.4, e), -0.2, lerp(-0.5, 1.6, e)];
+        pose.elR = pose.elL = -0.15; pose.torso = [0.35, e * Math.PI * 2.2, 0.15];
+        pose.hipL = -0.8; pose.knL = 1.0; pose.hipR = 0.6; pose.bob = Math.sin(e * Math.PI) * 0.35;
+      } else { // overhead / charge
         const wind = Math.min(1, p / 0.3), down = THREE.MathUtils.smoothstep(p, 0.26, 0.5);
         const a = lerp(lerp(-0.6, -3.35, wind), 0.45, down);
         pose.shR = [a, 0.1, -0.5]; pose.shL = [a, -0.1, 0.5]; pose.elR = pose.elL = -0.12;
@@ -2078,28 +2195,25 @@ function animatePlayer(dt) {
         pose.bob = lerp(0.15 * wind, -0.4 * down, Math.max(wind, down));
       }
     } else if (wpn === 'ss') {
-      if (id === 'back') {
-        // theatrical reverse slash — lean back then whip across
+      if (id === 'back' || id === 'twist' || id === 'advSlash') {
         pose.shR = [lerp(-2.1, -0.4, e), 0.2, lerp(-1.3, 2.0, e)]; pose.elR = lerp(-0.1, -0.55, e);
         pose.handR = [lerp(0.9, 0.2, e), 0, 0]; pose.shL = [-1.1, 0, 0.55]; pose.elL = -1.15;
         pose.torso = [lerp(-0.25, 0.35, e), lerp(-0.95, 0.9, e), 0];
         pose.hipL = lerp(0.35, -0.55, e); pose.knL = lerp(0.2, 0.7, e); pose.hipR = lerp(-0.3, 0.4, e);
         pose.bob = Math.sin(e * Math.PI) * 0.12;
-      } else if (id === 'bash') {
-        // shield slam: coil then punch forward with whole body
+      } else if (id === 'bash' || id === 'bashSpin' || id === 'shieldBurst') {
         const punch = THREE.MathUtils.smoothstep(p, 0.15, 0.45);
         pose.shL = [lerp(-2.0, -0.55, punch), 0.2, lerp(-0.2, 1.55, punch)]; pose.elL = lerp(-0.2, -0.7, punch);
         pose.handL = [0, lerp(-0.4, -1.2, punch), 0]; pose.shR = [-1.0, 0, -0.45]; pose.elR = -0.6;
-        pose.torso = [lerp(-0.15, 0.55, punch), lerp(-0.2, 0.55, punch), 0];
+        pose.torso = [lerp(-0.15, 0.55, punch), lerp(-0.2, id === 'bashSpin' ? Math.PI : 0.55, punch), 0];
         pose.hipL = -0.85 * punch; pose.knL = 1.0 * punch; pose.hipR = 0.5 * punch; pose.bob = -0.18 * punch;
-      } else if (id === 'rising') {
-        // spinning rising slash — big leap + twirl
+      } else if (id === 'rising' || id === 'flourish' || id === 'vault') {
         pose.shR = [lerp(-2.9, 0.15, e), 0.15, lerp(-0.4, 1.65, e)]; pose.elR = lerp(-0.05, -0.45, e);
         pose.shL = [lerp(-1.4, -0.7, e), 0, lerp(0.2, 0.9, e)]; pose.elL = -1.0;
-        pose.torso = [lerp(-0.35, 0.65, e), e * Math.PI * 1.65, lerp(0.1, -0.15, e)];
+        pose.torso = [lerp(-0.35, 0.65, e), e * Math.PI * (id === 'vault' ? 2.1 : 1.65), lerp(0.1, -0.15, e)];
         pose.hipL = -0.4; pose.knL = 0.55; pose.hipR = 0.35; pose.knR = 0.45;
-        pose.bob = Math.sin(e * Math.PI) * 0.42;
-      } else { // opening diagonal slash — high flourish into cut
+        pose.bob = Math.sin(e * Math.PI) * (id === 'vault' ? 0.55 : 0.42);
+      } else { // slash opener
         pose.shR = [lerp(-2.35, -0.25, e), 0.25, lerp(2.05, -1.1, e)]; pose.elR = lerp(-0.05, -0.5, e);
         pose.handR = [lerp(1.0, 0.25, e), 0, 0]; pose.shL = [-1.05, 0, 0.6]; pose.elL = -1.2;
         pose.torso = [0.18, lerp(0.85, -0.75, e), 0.08];
@@ -2107,35 +2221,34 @@ function animatePlayer(dt) {
         pose.bob = Math.sin(e * Math.PI) * 0.1;
       }
     } else {
-      // Dual Blades — distinct fast flurry language (both arms always live)
-      if (id === 'demon') {
-        pose.shR = [-1.6, 0.3, 1.8 - Math.sin(p * Math.PI * 4) * 0.9];
-        pose.shL = [-1.6, -0.3, -1.8 + Math.sin(p * Math.PI * 4) * 0.9];
-        pose.elR = pose.elL = -0.05; pose.torso = [0.35, p * Math.PI * 2.4, 0.3];
-        pose.hipL = -0.5; pose.knL = 0.65; pose.hipR = 0.5; pose.knR = 0.65; pose.bob = Math.sin(p * Math.PI * 2) * 0.15;
-      } else if (id === 'cross') {
-        // scissor cross — arms whip past each other with lean
+      // Dual Blades
+      if (id === 'demon' || id === 'spiral' || id === 'bladeStorm' || id === 'tempest') {
+        const spins = id === 'tempest' ? 5.5 : id === 'bladeStorm' ? 4.8 : 3.2;
+        pose.shR = [-1.7, 0.35, 1.85 - Math.sin(p * Math.PI * spins) * 1.1];
+        pose.shL = [-1.7, -0.35, -1.85 + Math.sin(p * Math.PI * spins) * 1.1];
+        pose.elR = pose.elL = -0.02; pose.torso = [0.4, p * Math.PI * spins, 0.32];
+        pose.hipL = -0.55; pose.knL = 0.7; pose.hipR = 0.55; pose.knR = 0.7;
+        pose.bob = Math.sin(p * Math.PI * 2) * 0.18;
+      } else if (id === 'cross' || id === 'hex') {
         pose.shR = [lerp(-1.85, -0.2, e), 0.35, lerp(2.1, -1.85, e)];
         pose.shL = [lerp(-1.85, -0.2, e), -0.35, lerp(-2.1, 1.85, e)];
         pose.elR = pose.elL = -0.05; pose.torso = [0.3, lerp(0.4, -0.4, e), 0.25];
         pose.hipL = lerp(0.45, -0.45, e); pose.knL = 0.55; pose.hipR = lerp(-0.45, 0.45, e); pose.knR = 0.55;
         pose.bob = Math.sin(e * Math.PI) * 0.14;
-      } else if (id === 'flurry') {
-        // tornado flurry — rapid multi-hit arm circles + full spin
+      } else if (id === 'flurry' || id === 'rush') {
         const wave = Math.sin(p * Math.PI * 5);
         pose.shR = [-1.75, 0.4, 1.7 - wave * 1.15]; pose.shL = [-1.75, -0.4, -1.7 + wave * 1.15];
         pose.elR = pose.elL = 0.05; pose.handR = [0.35, 0, 0]; pose.handL = [0.35, 0, 0];
         pose.torso = [0.4, p * Math.PI * 4.2, 0.35];
         pose.hipL = -0.55; pose.knL = 0.7; pose.hipR = 0.55; pose.knR = 0.7;
         pose.bob = 0.08 + Math.abs(wave) * 0.12;
-      } else if (id === 'finisher') {
-        // leaping X-slash finisher with big airborne spin
+      } else if (id === 'finisher' || id === 'razor') {
         pose.shR = [lerp(-2.2, 0.35, e), 0.45, lerp(2.2, -2.3, e)];
         pose.shL = [lerp(-2.2, 0.35, e), -0.45, lerp(-2.2, 2.3, e)];
         pose.elR = pose.elL = 0.1; pose.torso = [lerp(-0.2, 0.55, e), e * Math.PI * 2.8, 0.4];
         pose.hipL = -0.7; pose.knL = 0.9; pose.hipR = 0.7; pose.knR = 0.9;
         pose.bob = Math.sin(e * Math.PI) * 0.48;
-      } else { // double — staggered left/right stabs, low crouch rush
+      } else { // double
         pose.shR = [lerp(-1.5, -0.15, e), 0.25, lerp(1.65, -0.85, e)];
         pose.shL = [lerp(-0.6, -1.55, e), -0.25, lerp(-0.5, 1.55, e)];
         pose.elR = pose.elL = -0.1; pose.torso = [0.28, lerp(0.55, -0.55, e), 0.2];
@@ -2159,7 +2272,7 @@ function animatePlayer(dt) {
   R.el.rotation.x = lerp(R.el.rotation.x, pose.elR, k); L.el.rotation.x = lerp(L.el.rotation.x, pose.elL, k);
   sk(R.hand.rotation, pose.handR); sk(L.hand.rotation, pose.handL);
   // spin and roll are set directly so they don't lag behind the motion
-  const spinning = S.swing > 0 && (S.comboId === 'flurry' || S.comboId === 'finisher' || S.comboId === 'rising' || S.comboId === 'demon');
+  const spinning = S.swing > 0 && /flurry|finisher|rising|demon|whirl|flourish|vault|bladeStorm|tempest|bashSpin|spiral|razor/.test(S.comboId || '');
   torso.rotation.x = lerp(torso.rotation.x, pose.torso[0], k); torso.rotation.z = lerp(torso.rotation.z, pose.torso[2], k);
   torso.rotation.y = spinning ? pose.torso[1] : lerp(torso.rotation.y, pose.torso[1], k);
   rig.rotation.x = pose.rigX;
@@ -2185,6 +2298,7 @@ function hud() {
   }
   let pot = `藥水 ×${S.potions}`;
   if (S.charge >= 0) pot += ` · 蓄力`;
+  else if (S.comboRoute) pot += ` · ${S.comboRoute.replace(/A/g, '斬').replace(/S/g, '技')}`;
   else if (S.combo > 1) pot += ` · 連擊 ${S.combo}`;
   if (S.atkBoostT > 0) pot += ` · 攻↑`;
   $('pot').textContent = pot;
@@ -2295,11 +2409,11 @@ frame();
 window.__hunt = {
   run, get S() { return S; }, player, get dragons() { return dragons; }, get living() { return livingDragons(); },
   startFight, showPreview, generateEncounter, generateDragon, playerPower, estimatePower,
-  pad, pollGamepad, WEAPONS, COMBOS, sampleHeight, OBSTACLES, COLOR_DEFS, SFX, BGM, nearestDragon, beginComboHit, resetCombo,
+  pad, pollGamepad, WEAPONS, COMBOS, COMBO_TREE, sampleHeight, OBSTACLES, COLOR_DEFS, SFX, BGM, nearestDragon, beginComboHit, beginComboRoute, resetCombo,
   get PIXEL_SCALE() { return PIXEL_SCALE; }, pStats, DB_ATK_BUFF_T, DB_ATK_BUFF_MUL,
   goTitle, spawnTitleDragon, hurtPlayer, ensureAudio, spawnProjectile, pickAtk, dragonElems,
   doHit, spawnHitBurst, spawnDmgNumber, applyDragonPain, beginComboHit, severTail, animatePlayer, buildWeapon,
-  takeoffWindBlast, spawnWindBlastVfx, ATK,
+  takeoffWindBlast, spawnWindBlastVfx, spawnChargeDust, ATK,
   get muted() { return muted; }, get bgmMuted() { return bgmMuted; }, get bgmMode() { return bgmMode; },
   get projectiles() { return projectiles; }, get effects() { return effects; }, get floaters() { return floaters; },
 };
