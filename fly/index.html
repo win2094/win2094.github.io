@@ -61,7 +61,6 @@ header p { margin: 4px 0 0; color: var(--muted); font-size: 0.9rem; line-height:
   color: var(--ink);
 }
 
-/* Mobile touch overlay */
 #touch-ui {
   position: absolute;
   inset: 0;
@@ -97,18 +96,18 @@ header p { margin: 4px 0 0; color: var(--muted); font-size: 0.9rem; line-height:
   right: 2%;
   bottom: 5%;
   display: grid;
-  grid-template-columns: repeat(3, 56px);
+  grid-template-columns: repeat(3, 60px);
   gap: 8px;
   pointer-events: auto;
 }
 .btns button {
-  width: 56px;
-  height: 56px;
+  width: 60px;
+  height: 60px;
   border-radius: 50%;
   border: 2px solid rgba(255, 255, 255, 0.4);
   background: rgba(20, 32, 52, 0.55);
   color: #e8f0ff;
-  font: 700 12px/1 "IBM Plex Sans", sans-serif;
+  font: 700 13px/1 "IBM Plex Sans", sans-serif;
   letter-spacing: 0.04em;
   pointer-events: auto;
   -webkit-tap-highlight-color: transparent;
@@ -123,6 +122,12 @@ header p { margin: 4px 0 0; color: var(--muted); font-size: 0.9rem; line-height:
 #btn-rev { border-color: rgba(80, 200, 255, 0.7); }
 #btn-boost { border-color: rgba(255, 220, 80, 0.7); }
 #btn-brake { border-color: rgba(140, 180, 220, 0.7); }
+#btn-nuke {
+  border-color: rgba(255, 220, 80, 0.95);
+  background: rgba(90, 50, 10, 0.65);
+  color: #ffe060;
+  font-size: 14px;
+}
 
 @media (max-width: 720px) {
   body { padding: 6px; align-content: start; }
@@ -130,8 +135,9 @@ header p { margin: 4px 0 0; color: var(--muted); font-size: 0.9rem; line-height:
   .help { font-size: 0.75rem; }
   .stage { aspect-ratio: 16 / 11; width: 100%; }
   .stick { width: 96px; height: 96px; }
-  .btns { grid-template-columns: repeat(3, 48px); gap: 6px; }
-  .btns button { width: 48px; height: 48px; font-size: 10px; }
+  .btns { grid-template-columns: repeat(3, 54px); gap: 7px; }
+  .btns button { width: 54px; height: 54px; font-size: 11px; }
+  #btn-nuke { font-size: 12px; }
 }
 @media (orientation: landscape) and (max-height: 500px) {
   header { display: none; }
@@ -150,7 +156,7 @@ header p { margin: 4px 0 0; color: var(--muted); font-size: 0.9rem; line-height:
 <body>
   <div class="wrap">
     <header>
-      <h1>FLY 3D · v8.2</h1>
+      <h1>FLY 3D · v9</h1>
       <p>F-22 · BOSS 關卡循環 · 導彈彈匣 · W 加速／X 減速 · 手機觸控／鍵盤／滑鼠都得</p>
     </header>
     <div class="stage">
@@ -164,6 +170,7 @@ header p { margin: 4px 0 0; color: var(--muted); font-size: 0.9rem; line-height:
           <button type="button" id="btn-rev">反轉</button>
           <button type="button" id="btn-boost">加速</button>
           <button type="button" id="btn-brake">減速</button>
+          <button type="button" id="btn-nuke">核彈</button>
         </div>
       </div>
     </div>
@@ -171,9 +178,11 @@ header p { margin: 4px 0 0; color: var(--muted); font-size: 0.9rem; line-height:
       <span><kbd>E</kbd> 攀升 · <kbd>D</kbd> 下降 · <kbd>S</kbd>/<kbd>F</kbd> 轉彎</span>
       <span><kbd>W</kbd>／<kbd>Shift</kbd> 加速 · <kbd>X</kbd>／<kbd>Ctrl</kbd> 減速</span>
       <span><kbd>Space</kbd> 危急反轉 · <kbd>J</kbd> 機槍 · <kbd>K</kbd> 導彈（10 發後冷卻裝填）</span>
+      <span><kbd>N</kbd> 緊急核彈（每局 1 發：清晒敵機、子彈、導彈、島上炮台，BOSS 炮台全毀＋主體扣一半血，自己無事）</span>
       <span><kbd>M</kbd> 靜音 · <kbd>R</kbd> 重開</span>
+      <span>島上有炮台（雷達橙三角）同導彈車（雷達橙方格），可以打爆，75 秒後重建</span>
       <span>方向捍／滑鼠：向上＝機頭向下，向下＝機頭向上（E 仍係攀升）</span>
-      <span>手機：左半虛擬搖桿，右下機槍／導彈／反轉／加速／減速</span>
+      <span>手機：左半虛擬搖桿，右下機槍／導彈／反轉／加速／減速／核彈</span>
       <span>每擊落 3 架敵機掉武器：散＝散彈槍（近距大範圍高攻）、雷＝雷電（中距追蹤低攻）、爆＝破爆槍（大彈射得遠）。食同款升級最多 Lv3，食另一款變返 Lv1，死咗返機槍</span>
       <span>BOSS 散彈可打落你嘅導彈 · 每過一循環（LOOP）難度上升</span>
       <span>撳一下畫面或任何鍵開聲</span>
@@ -877,6 +886,7 @@ header p { margin: 4px 0 0; color: var(--muted); font-size: 0.9rem; line-height:
     hp: 100, invuln: 0, gunCd: 0, misCd: 0, gunSide: 1,
     misAmmo: 10, misReload: 0, misMax: 10, misReloadTime: 8,
     weapon: "gun", wlv: 1, kills: 0, wToast: "", wToastT: 0,
+    nukes: 1, nukeFlash: 0,
     rev: 0, revDir: 1, revCd: 0, revReq: false, lockState: 0,
     score: 0, mode: "fly", hitFlash: 0,
   };
@@ -1117,6 +1127,7 @@ header p { margin: 4px 0 0; color: var(--muted); font-size: 0.9rem; line-height:
     if (k === "k" && !keys.k) mouse.rEdge = true;
     if (k === " " && !keys[" "]) player.revReq = true;
     if (k === "m" && !keys.m) sfx.toggleMute();
+    if (k === "n" && !keys.n) fireNuke();
     keys[k] = true;
     if (k === "r") resetGame();
     if ([" ", "arrowup", "arrowdown", "arrowleft", "arrowright"].includes(k)) e.preventDefault();
@@ -1166,6 +1177,7 @@ header p { margin: 4px 0 0; color: var(--muted); font-size: 0.9rem; line-height:
   bindPad("btn-boost", () => { touchCtl.boost = true; }, () => { touchCtl.boost = false; });
   bindPad("btn-brake", () => { touchCtl.brake = true; }, () => { touchCtl.brake = false; });
   bindPad("btn-mute", () => { sfx.toggleMute(); }, () => {});
+  bindPad("btn-nuke", () => { fireNuke(); }, () => {});
 
   function setStickFromEvent(e, rect) {
     const cx = rect.left + rect.width * 0.22;
@@ -1265,8 +1277,9 @@ header p { margin: 4px 0 0; color: var(--muted); font-size: 0.9rem; line-height:
     eLaunchCd = 6;
     player.pos.set(T * 0.5, 75, T * 0.05);
     player.q.identity();
-    Object.assign(player, { bank: 0, sx: 0, sy: 0, speed: 60, hp: 100, invuln: 1.5, score: 0, mode: "fly", rev: 0, revCd: 0, misAmmo: 10, misReload: 0, misCd: 0, weapon: "gun", wlv: 1, kills: 0, wToastT: 0 });
+    Object.assign(player, { bank: 0, sx: 0, sy: 0, speed: 60, hp: 100, invuln: 1.5, score: 0, mode: "fly", rev: 0, revCd: 0, misAmmo: 10, misReload: 0, misCd: 0, weapon: "gun", wlv: 1, kills: 0, wToastT: 0, nukes: 1, nukeFlash: 0 });
     clearPickups();
+    resetDefenses();
     playerJet.visible = true;
     pilot.visible = false;
     rescueJet.visible = false;
@@ -1583,6 +1596,7 @@ header p { margin: 4px 0 0; color: var(--muted); font-size: 0.9rem; line-height:
 
   function lockables() {
     const list = enemies.slice();
+    for (const d of defenses) if (!d.dead && d.pos.distanceTo(player.pos) < 800) list.push(d);
     const b = stage.boss;
     if (b && b.dying <= 0) {
       for (const p of b.parts) if (!p.dead) list.push(p);
@@ -1591,6 +1605,7 @@ header p { margin: 4px 0 0; color: var(--muted); font-size: 0.9rem; line-height:
     return list;
   }
   function targetAlive(t) {
+    if (t.island) return !t.dead;
     return t.boss ? !t.dead && stage.boss === t.boss && t.boss.dying <= 0 : enemies.includes(t);
   }
   function insideHull(b, p, margin) {
@@ -1604,6 +1619,13 @@ header p { margin: 4px 0 0; color: var(--muted); font-size: 0.9rem; line-height:
       if (e.pos.distanceTo(pos) < 5.5 + extra) {
         e.hp -= dEnemy;
         if (e.hp <= 0) killEnemy(e, k);
+        return true;
+      }
+    }
+    for (const d of defenses) {
+      if (!d.dead && d.pos.distanceTo(pos) < d.r + extra) {
+        d.hp -= dBoss;
+        if (d.hp <= 0) destroyDefense(d);
         return true;
       }
     }
@@ -1836,6 +1858,173 @@ header p { margin: 4px 0 0; color: var(--muted); font-size: 0.9rem; line-height:
       }
     }
     if (flying && insideHull(b, player.pos, 1)) playerDown(true);
+  }
+
+  // ── Island defenses (gun turrets + SAM sites on the repeating islands) ──
+  // Sites live in tile coords; each frame they snap to the tile copy nearest the player.
+  const DEF_RESPAWN = 75;
+  const defenses = [];
+  const DEF_MAT_BASE = new T3.MeshLambertMaterial({ color: 0x5a5e52 });
+  const DEF_MAT_GUN = new T3.MeshLambertMaterial({ color: 0x3a3e38 });
+  const DEF_MAT_SAM = new T3.MeshLambertMaterial({ color: 0x6a6a3a });
+  const DEF_MAT_TIP = new T3.MeshLambertMaterial({ color: 0xd04020 });
+  function makeDefense(kind, sx, sz) {
+    const group = new T3.Group();
+    const add = (parent, w, h, d, x, y, z, mat) => {
+      const m = new T3.Mesh(BOX, mat);
+      m.scale.set(w, h, d);
+      m.position.set(x, y, z);
+      parent.add(m);
+      return m;
+    };
+    add(group, 7, 2, 7, 0, 1, 0, DEF_MAT_BASE);
+    const pivot = new T3.Group();
+    pivot.position.y = 3;
+    group.add(pivot);
+    if (kind === "gun") {
+      add(pivot, 3.6, 2.2, 3.6, 0, 0, 0, DEF_MAT_GUN);
+      add(pivot, 0.6, 0.6, 5, -0.7, 0.3, 3, DEF_MAT_GUN);
+      add(pivot, 0.6, 0.6, 5, 0.7, 0.3, 3, DEF_MAT_GUN);
+    } else {
+      add(pivot, 4.4, 1.2, 3, 0, 0, 0, DEF_MAT_SAM);
+      for (const x of [-1.2, 1.2]) {
+        add(pivot, 0.9, 0.9, 5.5, x, 1.1, 0.6, DEF_MAT_SAM);
+        add(pivot, 0.7, 0.7, 0.6, x, 1.1, 3.5, DEF_MAT_TIP);
+      }
+    }
+    scene.add(group);
+    const max = kind === "gun" ? 40 : 50;
+    const d = {
+      island: true, kind, group, pivot, sx, sz, gy: groundH(sx, sz),
+      pos: new T3.Vector3(), hp: max, max, r: 6, dead: false, respawn: 0,
+      cd: rnd(2, 5), lockP: 0, lockT: 0,
+    };
+    defenses.push(d);
+    return d;
+  }
+  ISL.forEach(([cx, cz, r], k) => {
+    const a = k * 1.7;
+    makeDefense("gun", cx + Math.cos(a) * r * 0.35, cz + Math.sin(a) * r * 0.35);
+    if (r >= 100) {
+      makeDefense("sam", cx + Math.cos(a + 2.4) * r * 0.3, cz + Math.sin(a + 2.4) * r * 0.3);
+      makeDefense("gun", cx + Math.cos(a + 4.2) * r * 0.4, cz + Math.sin(a + 4.2) * r * 0.4);
+    }
+  });
+  function destroyDefense(d) {
+    d.dead = true;
+    d.group.visible = false;
+    d.respawn = DEF_RESPAWN;
+    d.lockP = 0;
+    boom(d.pos, 7);
+    player.score += 3;
+  }
+  function resetDefenses() {
+    for (const d of defenses) {
+      d.dead = false;
+      d.hp = d.max;
+      d.group.visible = true;
+      d.lockP = 0;
+      d.cd = rnd(2, 5);
+    }
+  }
+  const _mz = new T3.Vector3();
+  function updateDefenses(dt) {
+    const flying = player.mode === "fly";
+    const L = Math.floor(stage.n / BOSS_KINDS.length);
+    for (const d of defenses) {
+      const wx = d.sx + Math.round((player.pos.x - d.sx) / T) * T;
+      const wz = d.sz + Math.round((player.pos.z - d.sz) / T) * T;
+      d.group.position.set(wx, d.gy, wz);
+      d.pos.set(wx, d.gy + 3, wz);
+      if (d.dead) {
+        d.respawn -= dt;
+        if (d.respawn <= 0 && d.pos.distanceTo(player.pos) > 500) {
+          d.dead = false;
+          d.max = (d.kind === "gun" ? 40 : 50) * (1 + L * 0.3);
+          d.hp = d.max;
+          d.group.visible = true;
+        }
+        continue;
+      }
+      const dist = d.pos.distanceTo(player.pos);
+      if (dist < 900) {
+        d.pivot.lookAt(player.pos);
+        d.group.updateMatrixWorld(true);
+      }
+      d.cd -= dt;
+      const canSee = flying && player.invuln <= 0;
+      _mz.set(0, 0.6, 4).applyMatrix4(d.pivot.matrixWorld);
+      if (d.kind === "gun") {
+        if (canSee && dist < 420 && d.cd <= 0) {
+          d.cd = rnd(4.5, 6.5) / (1 + L * 0.12);
+          fireScatter(_mz.clone(), player.pos, 3 + Math.min(2, L), 62 + L * 4, 0.28, {
+            dmg: 5 + L, r: 5, life: 5.5, vol: 0.25 * clamp(1 - dist / 600, 0.2, 1),
+          });
+        }
+      } else if (canSee && player.rev <= 0 && dist < 650 && dist > 70 && d.cd <= 0) {
+        d.lockP += dt;
+        if (d.lockP > LOCK_FIRE) {
+          d.lockP = 0;
+          if (canLaunch()) {
+            d.cd = rnd(14, 18);
+            launchEnemyMissile(_mz.clone(), player.pos.clone().sub(_mz).normalize().add(new T3.Vector3(0, 0.8, 0)), 46);
+          } else {
+            d.cd = Math.max(d.cd, 5);
+          }
+        }
+      } else {
+        d.lockP = Math.max(0, d.lockP - dt * 2);
+      }
+    }
+  }
+
+  // ── Emergency nuke: one charge until R restart; player unharmed ──
+  function fireNuke() {
+    if (player.nukes <= 0 || player.mode !== "fly") return;
+    sfx.init();
+    player.nukes--;
+    player.invuln = Math.max(player.invuln, 2);
+    player.nukeFlash = 1.4;
+    sfx.boom(true, 1);
+    setTimeout(() => sfx.boom(true, 0.9), 160);
+    setTimeout(() => sfx.boom(true, 0.7), 380);
+    addSprite(TEX_BOOM, player.pos.clone().addScaledVector(fwdOf(player.q), 80), 30, 320, 1.4, 0xffffff);
+    for (let i = enemies.length - 1; i >= 0; i--) killEnemy(enemies[i], i);
+    lockOwner = null;
+    for (let i = bullets.length - 1; i >= 0; i--) {
+      if (bullets[i].friendly) continue;
+      scene.remove(bullets[i].m);
+      bullets.splice(i, 1);
+    }
+    for (const m of eMissiles) {
+      boom(m.m.position, 3);
+      scene.remove(m.m);
+    }
+    eMissiles.length = 0;
+    for (const d of defenses) if (!d.dead && d.pos.distanceTo(player.pos) < 1500) destroyDefense(d);
+    const b = stage.boss;
+    if (b && b.dying <= 0) {
+      for (const pt of b.parts) {
+        if (pt.dead) continue;
+        pt.dead = true;
+        pt.pivot.visible = false;
+        boom(pt.pos, 7);
+        player.score += 5;
+      }
+      // Half max HP to core (direct — avoid damageAt stealing the hit on a nearby site)
+      b.core.hp -= b.core.max * 0.5;
+      b.hitT = 0.1;
+      if (b.core.hp <= 0) {
+        b.dying = 2.4;
+        b.core.dead = true;
+        for (const p of b.parts) p.dead = true;
+        for (const m of eMissiles) m.homing = false;
+        player.score += 50;
+        stage.banner = "STAGE CLEAR";
+        stage.bannerT = 3;
+        boom(b.core.pos, 18);
+      }
+    }
   }
 
   // ── Update ──────────────────────────────────────────────────
@@ -2320,8 +2509,15 @@ header p { margin: 4px 0 0; color: var(--muted); font-size: 0.9rem; line-height:
     }
     hx.font = "9px monospace";
     hx.fillText(`SCORE ${player.score}`, RW - 78, 14);
-    if (sfx.isMuted()) hx.fillText("MUTE (M)", RW - 78, 25);
+    hx.fillStyle = player.nukes > 0 ? "#ffe060" : "#6a7080";
+    hx.fillText(`NUKE: ${player.nukes}`, RW - 78, 25);
+    hx.fillStyle = "#e8f0ff";
+    if (sfx.isMuted()) hx.fillText("MUTE (M)", RW - 78, 36);
     drawRadar();
+    if (player.nukeFlash > 0) {
+      hx.fillStyle = `rgba(255,250,230,${Math.min(1, player.nukeFlash / 1.4) * 0.9})`;
+      hx.fillRect(0, 0, RW, RH);
+    }
   }
 
   function drawBossHud() {
@@ -2473,6 +2669,20 @@ header p { margin: 4px 0 0; color: var(--muted); font-size: 0.9rem; line-height:
         hx.strokeRect(p.x - 3.5, p.y - 3.5, 7, 7);
       }
     }
+    for (const d of defenses) {
+      if (d.dead || d.pos.distanceTo(center) > 900) continue;
+      const p = toRadar(d.pos);
+      hx.fillStyle = d.lockP > LOCK_WARN && blink ? "#ffff60" : "#ff9020";
+      if (d.kind === "gun") {
+        hx.beginPath();
+        hx.moveTo(p.x, p.y - 2); hx.lineTo(p.x + 2, p.y + 2); hx.lineTo(p.x - 2, p.y + 2);
+        hx.closePath(); hx.fill();
+      } else {
+        hx.fillRect(p.x - 2, p.y - 2, 4, 4);
+        hx.fillStyle = "#401000";
+        hx.fillRect(p.x - 0.5, p.y - 0.5, 1, 1);
+      }
+    }
     const b = stage.boss;
     if (b && b.dying <= 0) {
       const p = toRadar(b.core.pos);
@@ -2514,6 +2724,7 @@ header p { margin: 4px 0 0; color: var(--muted); font-size: 0.9rem; line-height:
     const incoming = flying && near < Infinity;
     const b = stage.boss;
     const locking = flying && (enemies.some((e) => e.lockP > LOCK_WARN)
+      || defenses.some((d) => !d.dead && d.lockP > LOCK_WARN)
       || (b && b.dying <= 0 && (b.parts.some((p) => !p.dead && p.lockP > LOCK_WARN) || b.lockP > LOCK_WARN)));
     alert.warn = incoming ? "MISSILE" : locking ? "LOCK" : "";
     alert.t -= dt;
@@ -2542,6 +2753,8 @@ header p { margin: 4px 0 0; color: var(--muted); font-size: 0.9rem; line-height:
     sfx.engine(player.speed, flying);
   }
 
+  if (params.has("test")) window.__fly = { stage, player, enemies, eMissiles, missiles, bullets, camera, damageAt, alert, pilot, eject, pickups, spawnPickup, killEnemy, defenses, fireNuke };
+
   // ── Loop ────────────────────────────────────────────────────
   resetGame();
   let last = performance.now();
@@ -2550,10 +2763,12 @@ header p { margin: 4px 0 0; color: var(--muted); font-size: 0.9rem; line-height:
     last = now;
     time += dt;
     player.hitFlash = Math.max(0, player.hitFlash - dt);
+    player.nukeFlash = Math.max(0, player.nukeFlash - dt);
     if (player.mode === "fly") updatePlayer(dt);
     else updateEject(dt);
     updateEnemies(dt);
     updateBoss(dt);
+    updateDefenses(dt);
     updateProjectiles(dt);
     updatePickups(dt);
     updateAlerts(dt);
