@@ -7,53 +7,49 @@
   root.dataset.lang = initial;
 
   document.querySelectorAll("[data-lang-toggle]").forEach((btn) => {
+    const sync = (lang) => {
+      btn.textContent = lang === "zh" ? "EN" : "中文";
+      btn.setAttribute("aria-label", lang === "zh" ? "Switch to English" : "切換至中文");
+    };
+    sync(initial);
     btn.addEventListener("click", () => {
       const next = root.dataset.lang === "zh" ? "en" : "zh";
       root.dataset.lang = next;
       localStorage.setItem("hsu-lang", next);
-      btn.setAttribute("aria-label", next === "zh" ? "Switch to English" : "切換至中文");
-      btn.textContent = next === "zh" ? "EN" : "中文";
-    });
-    btn.textContent = initial === "zh" ? "EN" : "中文";
-    btn.setAttribute("aria-label", initial === "zh" ? "Switch to English" : "切換至中文");
-  });
-
-  const io = "IntersectionObserver" in window
-    ? new IntersectionObserver((entries) => {
-        entries.forEach((entry) => {
-          if (entry.isIntersecting) {
-            entry.target.classList.add("is-in");
-            io.unobserve(entry.target);
-          }
-        });
-      }, { threshold: 0.16 })
-    : null;
-
-  document.querySelectorAll(".reveal").forEach((el) => {
-    if (io) io.observe(el);
-    else el.classList.add("is-in");
-  });
-
-  // Ensure first game band visible even if IO is delayed
-  requestAnimationFrame(() => {
-    document.querySelectorAll(".reveal").forEach((el) => {
-      const rect = el.getBoundingClientRect();
-      if (rect.top < window.innerHeight * 0.92) el.classList.add("is-in");
+      sync(next);
     });
   });
+
+  const reveals = document.querySelectorAll(".reveal");
+  if ("IntersectionObserver" in window) {
+    const io = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        if (!entry.isIntersecting) return;
+        entry.target.classList.add("is-in");
+        io.unobserve(entry.target);
+      });
+    }, { threshold: 0.12, rootMargin: "0px 0px -8% 0px" });
+    reveals.forEach((el) => {
+      // Above-the-fold: show immediately without waiting for IO
+      if (el.getBoundingClientRect().top < window.innerHeight * 0.92) {
+        el.classList.add("is-in");
+      } else {
+        io.observe(el);
+      }
+    });
+  } else {
+    reveals.forEach((el) => el.classList.add("is-in"));
+  }
 
   const flyEmbed = document.querySelector(".fly-embed");
   const flyFrame = document.getElementById("fly-frame");
   const flyFocus = document.querySelector("[data-fly-focus]");
   if (flyEmbed && flyFrame && flyFocus) {
-    const focusFly = () => {
+    const focus = () => {
       flyEmbed.classList.add("is-focused");
-      try { flyFrame.focus(); } catch (_) { /* ignore */ }
+      flyFrame.focus();
     };
-    flyFocus.addEventListener("click", focusFly);
+    flyFocus.addEventListener("click", focus);
     flyFrame.addEventListener("focus", () => flyEmbed.classList.add("is-focused"));
-    flyFrame.addEventListener("blur", () => {
-      // keep overlay hidden once played; avoid flicker when clicking inside game
-    });
   }
 })();
